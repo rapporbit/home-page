@@ -1,0 +1,154 @@
+# 🌌 Simple Start Page - 示例配置
+# 复制此内容到你的 GitHub Gist (文件名: nav.yml)
+
+# 1. 搜索引擎配置
+search:
+  - name: "Google"
+    url: "https://www.google.com/search?q="
+    icon: "ph-google-logo"
+  - name: "Bing"
+    url: "https://www.bing.com/search?q="
+    icon: "ph-microsoft-outlook-logo"
+  - name: "Bilibili"
+    url: "https://search.bilibili.com/all?keyword="
+    icon: "ph-television"
+  - name: "小红书"
+    url: "https://www.xiaohongshu.com/search_result?keyword="
+    icon: "ph-book"
+
+
+# 2. 链接分类配置
+categories:
+  # --- 第一行: 社交与媒体 (占据主要位置) ---
+  - category: "Social & Daily"
+    color: "from-blue-600/20 to-cyan-600/20"
+    colSpan: 2  # 宽卡片
+    rowSpan: 1
+    items:
+      - name: "Twitter / X"
+        url: "https://x.com"
+        icon: "ph-x-logo"
+      - name: "Gmail"
+        url: "https://mail.google.com"
+        icon: "ph-envelope-simple"
+      - name: "Instagram"
+        url: "https://instagram.com"
+        icon: "ph-instagram-logo"
+      - name: "Telegram"
+        url: "https://web.telegram.org"
+        icon: "ph-telegram-logo"
+      - name: "Reddit"
+        url: "https://reddit.com"
+        icon: "ph-reddit-logo"
+      - name: "Discord"
+        url: "https://discord.com"
+        icon: "ph-discord-logo"
+
+  - category: "Streaming"
+    color: "from-red-600/20 to-pink-600/20"
+    colSpan: 1
+    rowSpan: 1
+    items:
+      - name: "YouTube"
+        url: "https://youtube.com"
+        icon: "ph-youtube-logo"
+      - name: "Netflix"
+        url: "https://netflix.com"
+        icon: "ph-film-strip"
+      - name: "Bilibili"
+        url: "https://bilibili.com"
+        icon: "ph-television"
+      - name: "Spotify"
+        url: "https://open.spotify.com"
+        icon: "ph-spotify-logo"
+
+  # --- 第二行: 常用工具与开发 ---
+  - category: "Dev & Code"
+    color: "from-slate-600/20 to-zinc-600/20"
+    colSpan: 1
+    rowSpan: 2 # 竖长卡片
+    items:
+      - name: "GitHub"
+        url: "https://github.com"
+        icon: "ph-github-logo"
+      - name: "Vercel"
+        url: "https://vercel.com"
+        icon: "ph-triangle"
+      - name: "ChatGPT"
+        url: "https://chatgpt.com"
+        icon: "ph-robot"
+      - name: "Claude"
+        url: "https://claude.ai"
+        icon: "ph-brain"
+      - name: "StackOverflow"
+        url: "https://stackoverflow.com"
+        icon: "ph-stack-overflow-logo"
+      - name: "Hacker News"
+        url: "https://news.ycombinator.com"
+        icon: "ph-newspaper"
+      - name: "Dev.to"
+        url: "https://dev.to"
+        icon: "ph-code"
+      - name: "Hugging Face"
+        url: "https://huggingface.co"
+        icon: "ph-smiley"
+
+  - category: "Home Lab (Private)"
+    color: "from-emerald-600/20 to-teal-600/20"
+    colSpan: 2
+    rowSpan: 1
+    items:
+      # 演示双链接功能 (点击图标切换内外网)
+      - name: "OpenWrt Router"
+        url: "https://router.example.com"      # 公网
+        url_private: "http://192.168.1.1"      # 内网
+        icon: "ph-router"
+      - name: "Portainer"
+        url: "https://portainer.example.com"
+        url_private: "http://192.168.1.10:9000"
+        icon: "ph-docker-logo"
+      - name: "Proxmox VE"
+        url: "https://pve.example.com"
+        url_private: "https://192.168.1.2:8006"
+        icon: "ph-hard-drives"
+      - name: "TrueNAS"
+        url: "https://nas.example.com"
+        url_private: "http://192.168.1.5"
+        icon: "ph-server"
+
+  # --- 第三行: 设计与购物 ---
+  - category: "Design Tools"
+    color: "from-purple-600/20 to-fuchsia-600/20"
+    colSpan: 1
+    rowSpan: 1
+    items:
+      - name: "Figma"
+        url: "https://figma.com"
+        icon: "ph-figma-logo"
+      - name: "Dribbble"
+        url: "https://dribbble.com"
+        icon: "ph-dribbble-logo"
+      - name: "Unsplash"
+        url: "https://unsplash.com"
+        icon: "ph-image"
+      - name: "Coolors"
+        url: "https://coolors.co"
+        icon: "ph-palette"
+
+  - category: "Shopping"
+    color: "from-orange-600/20 to-yellow-600/20"
+    colSpan: 2
+    rowSpan: 1
+    items:
+      - name: "Amazon"
+        url: "https://amazon.com"
+        icon: "ph-amazon-logo"
+      - name: "AliExpress"
+        url: "https://aliexpress.com"
+        icon: "ph-shopping-bag"
+      - name: "Taobao"
+        url: "https://taobao.com"
+        icon: "ph-tag"
+      - name: "JD.com"
+        url: "https://jd.com"
+        icon: "ph-shopping-cart"

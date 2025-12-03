@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Start Page</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <!-- 第三方库 CDN -->
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.7)',
+                        'glass-hover': 'rgba(255, 255, 255, 0.9)',
+                        'glass-dark': 'rgba(0, 0, 0, 0.4)',
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="min-h-screen text-white selection:bg-pink-500 selection:text-white">
+
+    <div class="fixed inset-0 bg-black/20 pointer-events-none z-0"></div>
+    <div id="toast-container"></div>
+
+    <!-- 编辑模式顶栏 -->
+    <div id="edit-bar"
+        class="fixed top-0 left-0 right-0 z-50 bg-emerald-600/90 backdrop-blur text-white py-3 px-6 flex justify-between items-center transform -translate-y-full transition-transform duration-300 shadow-lg">
+        <div class="flex items-center gap-3 font-bold">
+            <i class="ph ph-pencil-simple-line text-xl animate-pulse"></i>
+            EDIT MODE
+        </div>
+        <div class="flex gap-3">
+            <button onclick="openImportModal()"
+                class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <i class="ph ph-download-simple"></i> Import Config
+            </button>
+            <button onclick="exportYaml()"
+                class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                <i class="ph ph-export"></i> Copy Config
+            </button>
+            <button onclick="toggleEditMode(false)"
+                class="px-4 py-1.5 bg-white text-emerald-700 hover:bg-gray-100 rounded-lg text-sm font-bold transition-colors">
+                Done
+            </button>
+        </div>
+    </div>
+
+    <button id="wallpaper-button" type="button"
+        class="fixed bottom-6 right-6 z-30 glass-panel p-3 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/30 transition-colors floating-action"
+        aria-label="Change Wallpaper" title="换一张随机壁纸">
+        <i class="ph ph-image text-xl"></i>
+    </button>
+
+    <!-- 导入配置弹窗 (Import Modal) -->
+    <div id="import-modal"
+        class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        <div
+            class="modal-glass rounded-2xl p-6 w-full max-w-lg transform scale-95 transition-transform duration-300 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                <i class="ph ph-file-text"></i> <span>Import Configuration</span>
+            </h3>
+            <p class="text-sm text-white/60 mb-4">Paste your YAML content here. This will <b>overwrite</b> your current
+                local data.</p>
+
+            <textarea id="import-area"
+                class="input-glass h-64 font-mono text-xs leading-relaxed resize-none p-4 focus:bg-white/10"
+                placeholder="categories:\n  - category: My Lab..."></textarea>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closeImportModal()"
+                    class="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
+                <button onclick="importYaml()"
+                    class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-900/20 transition-all">Import
+                    & Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗编辑器 (Edit Item Modal) -->
+    <div id="editor-modal"
+        class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        <div
+            class="modal-glass rounded-2xl p-6 w-full max-w-md transform scale-95 transition-transform duration-300 shadow-2xl">
+            <h3 id="modal-title" class="text-xl font-bold mb-6 flex items-center gap-2">
+                <i class="ph ph-pencil"></i> <span>Edit Item</span>
+            </h3>
+
+            <div class="space-y-4">
+                <input type="hidden" id="edit-type">
+                <input type="hidden" id="edit-parent-idx">
+                <input type="hidden" id="edit-self-idx">
+
+                <div>
+                    <label class="block text-xs text-white/50 uppercase mb-1">Name</label>
+                    <input type="text" id="inp-name" class="input-glass" placeholder="Title">
+                </div>
+
+                <div class="edit-field-item">
+                    <label class="block text-xs text-white/50 uppercase mb-1">Public URL</label>
+                    <input type="text" id="inp-url" class="input-glass" placeholder="https://...">
+                </div>
+                <div class="edit-field-item">
+                    <label class="block text-xs text-white/50 uppercase mb-1">Private URL (Optional)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="inp-private" class="input-glass" placeholder="http://192.168...">
+                        <div class="p-2 bg-white/10 rounded flex items-center justify-center"
+                            title="Switch toggle will appear">
+                            <i class="ph ph-house-line"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="edit-field-category hidden">
+                    <label class="block text-xs text-white/50 uppercase mb-1">Color Gradient</label>
+                    <select id="inp-color" class="input-glass bg-black">
+                        <option value="from-white/10 to-white/5">Default (Glass)</option>
+                        <option value="from-blue-600/20 to-indigo-600/20">Blue / Indigo</option>
+                        <option value="from-emerald-600/20 to-teal-600/20">Emerald / Teal</option>
+                        <option value="from-red-600/20 to-pink-600/20">Red / Pink</option>
+                        <option value="from-purple-600/20 to-fuchsia-600/20">Purple / Fuchsia</option>
+                        <option value="from-orange-600/20 to-yellow-600/20">Orange / Yellow</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-white/50 uppercase mb-1">Icon</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="inp-icon" class="input-glass" placeholder="e.g. ph-github-logo">
+                        <a href="https://phosphoricons.com/" target="_blank"
+                            class="p-2 bg-white/10 hover:bg-white/20 rounded text-white/70 transition-colors"
+                            title="Find Icons">
+                            <i class="ph ph-magnifying-glass"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="edit-field-item pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span class="text-sm font-medium text-white/80">Hide this item</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="inp-hidden" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600">
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3">
+                <button onclick="closeModal()"
+                    class="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
+                <button onclick="saveModal()"
+                    class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-900/20 transition-all">Save
+                    Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="relative z-10 container mx-auto px-4 pt-8 pb-8 max-w-6xl flex flex-col items-center transition-all duration-300"
+        id="main-content">
+        <!-- 头部 -->
+        <header class="text-center mb-8 animate-fade-in-down">
+            <h1 id="clock"
+                class="text-6xl md:text-8xl font-bold tracking-tight mb-2 drop-shadow-lg"
+                title="Current time">00:00</h1>
+            <p id="date" class="text-lg md:text-xl font-medium text-white/90 drop-shadow-md">Loading...</p>
+        </header>
+
+        <!-- 搜索栏 -->
+        <div class="w-full max-w-2xl mb-10">
+            <div
+                class="glass-panel search-glass rounded-2xl flex items-center p-1 transition-all duration-300 relative group">
+                <div class="pl-4 text-white/70">
+                    <i id="search-icon"
+                        class="ph ph-magnifying-glass text-2xl group-focus-within:text-white transition-colors"></i>
+                </div>
+                <input type="text" id="search-input"
+                    class="w-full bg-transparent border-none text-white placeholder-white/60 text-lg px-4 py-2.5 focus:outline-none"
+                    placeholder="Search or type '>edit'..." autocomplete="off" autofocus>
+                <div id="engine-container" class="hidden md:flex gap-2 pr-2"></div>
+            </div>
+
+            <div class="mt-2 text-center text-xs text-white/40 font-mono hidden md:block space-x-4">
+                <span><span class="bg-white/10 px-1 rounded text-white/70">>edit</span> customize</span>
+                <span><span class="bg-white/10 px-1 rounded text-white/70">>sync</span> update</span>
+            </div>
+        </div>
+
+        <!-- 导航网格 -->
+        <div id="grid-container"
+            class="folder-scroll-area w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-0 auto-rows-min grid-flow-dense">
+        </div>
+    </div>
+
+    <footer class="relative z-10 mt-0 mb-8 text-center text-white/40 text-sm font-medium">
+        <span id="bing-copyright">Image by Bing</span> | <span id="data-source">Local Data</span> | <a
+            href="https://github.com/rapporbit/simple-start-page">Github</a>
+    </footer>
+
+    <!-- 引入核心逻辑 -->
+    <script src="js/app.js"></script>
+</body>
+
+</html>
