@@ -1,0 +1,29 @@
+{
+  "name": "simple-start-page",
+  "version": "1.0.0",
+  "description": "一个极简、高颜值、功能强大的浏览器起始页。支持拖拽布局、卡片缩放、远程配置同步、内网网址切换等功能。",
+  "main": "index.js",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/tw.css -o ./dist/app.css -c ./tailwind.config.js -m",
+    "build": "npm run build:css",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rapporbit/home-page.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rapporbit/home-page/issues"
+  },
+  "homepage": "https://github.com/rapporbit/home-page#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "postcss-cli": "^11.0.1",
+    "tailwindcss": "^3.4.14"
+  }
+}

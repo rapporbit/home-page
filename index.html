@@ -6,42 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Start Page</title>
     <link rel="icon" href="favicon.png" type="image/png">
-    <!-- 第三方库 CDN -->
-    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-
-    <!-- Tailwind 配置 -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        glass: 'rgba(255, 255, 255, 0.7)',
-                        'glass-hover': 'rgba(255, 255, 255, 0.9)',
-                        'glass-dark': 'rgba(0, 0, 0, 0.4)',
-                    },
-                    animation: {
-                        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    },
-                    keyframes: {
-                        fadeInUp: {
-                            '0%': { opacity: '0', transform: 'translateY(10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- 自定义样式 -->
+    <!-- 本地样式与依赖（MV3 兼容） -->
+    <link rel="stylesheet" href="dist/app.css">
     <link rel="stylesheet" href="css/style.css">
+    <!-- Phosphor Icons (本地) -->
+    <link rel="stylesheet" href="vendor/phosphor-icons/regular/style.css">
+    <link rel="stylesheet" href="vendor/phosphor-icons/thin/style.css">
+    <link rel="stylesheet" href="vendor/phosphor-icons/light/style.css">
+    <link rel="stylesheet" href="vendor/phosphor-icons/bold/style.css">
+    <link rel="stylesheet" href="vendor/phosphor-icons/fill/style.css">
+    <link rel="stylesheet" href="vendor/phosphor-icons/duotone/style.css">
+    <!-- 本地脚本库 -->
+    <script src="vendor/js-yaml.min.js"></script>
+    <script src="vendor/Sortable.min.js"></script>
 </head>
 
 <body class="min-h-screen text-white selection:bg-pink-500 selection:text-white">
@@ -57,15 +34,15 @@
             EDIT MODE
         </div>
         <div class="flex gap-3">
-            <button onclick="openImportModal()"
+            <button id="btn-open-import"
                 class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                 <i class="ph ph-download-simple"></i> Import Config
             </button>
-            <button onclick="exportYaml()"
+            <button id="btn-export-yaml"
                 class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                 <i class="ph ph-export"></i> Copy Config
             </button>
-            <button onclick="toggleEditMode(false)"
+            <button id="btn-done-edit"
                 class="px-4 py-1.5 bg-white text-emerald-700 hover:bg-gray-100 rounded-lg text-sm font-bold transition-colors">
                 Done
             </button>
@@ -94,9 +71,9 @@
                 placeholder="categories:\n  - category: My Lab..."></textarea>
 
             <div class="mt-6 flex justify-end gap-3">
-                <button onclick="closeImportModal()"
+                <button id="btn-close-import"
                     class="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
-                <button onclick="importYaml()"
+                <button id="btn-import-apply"
                     class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg shadow-blue-900/20 transition-all">Import
                     & Apply</button>
             </div>
@@ -173,9 +150,9 @@
             </div>
 
             <div class="mt-8 flex justify-end gap-3">
-                <button onclick="closeModal()"
+                <button id="btn-close-editor"
                     class="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
-                <button onclick="saveModal()"
+                <button id="btn-save-editor"
                     class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-900/20 transition-all">Save
                     Changes</button>
             </div>

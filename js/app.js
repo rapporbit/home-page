@@ -23,6 +23,18 @@ let isWallpaperLoading = false;
 // Core Init
 // ==========================================
 async function init() {
+    // Bind top-level UI buttons (no inline handlers per MV3)
+    const bind = (id, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', handler);
+    };
+    bind('btn-open-import', openImportModal);
+    bind('btn-export-yaml', exportYaml);
+    bind('btn-done-edit', () => toggleEditMode(false));
+    bind('btn-close-import', closeImportModal);
+    bind('btn-import-apply', importYaml);
+    bind('btn-close-editor', closeModal);
+    bind('btn-save-editor', saveModal);
     applyStoredWallpaper();
     updateTime();
     setInterval(updateTime, 1000);
@@ -123,10 +135,19 @@ function renderGrid() {
             const controls = document.createElement('div');
             controls.className = "flex gap-2";
             controls.innerHTML = `
-                <button onclick="toggleCategoryVisibility(${index})" class="text-white/50 hover:text-white transition-colors"><i class="ph ${group.hidden ? 'ph-eye-slash text-red-400' : 'ph-eye'}"></i></button>
-                <button onclick="openModal('category', null, null, ${index})" class="text-white/50 hover:text-white transition-colors"><i class="ph ph-pencil-simple"></i></button>
-                <button onclick="deleteCategory(${index})" class="text-white/50 hover:text-red-400 transition-colors"><i class="ph ph-trash"></i></button>
+                <button class="text-white/50 hover:text-white transition-colors" data-action="toggle-cat" data-index="${index}"><i class="ph ${group.hidden ? 'ph-eye-slash text-red-400' : 'ph-eye'}"></i></button>
+                <button class="text-white/50 hover:text-white transition-colors" data-action="edit-cat" data-index="${index}"><i class="ph ph-pencil-simple"></i></button>
+                <button class="text-white/50 hover:text-red-400 transition-colors" data-action="delete-cat" data-index="${index}"><i class="ph ph-trash"></i></button>
             `;
+            controls.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('button[data-action]');
+                if (!btn) return;
+                const idx = parseInt(btn.getAttribute('data-index'));
+                const act = btn.getAttribute('data-action');
+                if (act === 'toggle-cat') toggleCategoryVisibility(idx);
+                else if (act === 'edit-cat') openModal('category', null, null, idx);
+                else if (act === 'delete-cat') deleteCategory(idx);
+            });
             header.appendChild(controls);
         }
         card.appendChild(header);
@@ -209,17 +230,26 @@ function createItemElement(item, index, parentIndex) {
     wrapper.className = "relative group";
     if (isEditMode && item.hidden) wrapper.classList.add('is-hidden-element');
 
-    if (isEditMode) {
-        const controls = document.createElement('div');
-        controls.className = "absolute -top-2 -right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity scale-90";
-        const hiddenBadge = item.hidden ? `<span class="p-1.5 bg-gray-600 rounded-full text-white shadow-lg"><i class="ph ph-eye-slash text-xs"></i></span>` : '';
-        controls.innerHTML = `
+        if (isEditMode) {
+            const controls = document.createElement('div');
+            controls.className = "absolute -top-2 -right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity scale-90";
+            const hiddenBadge = item.hidden ? `<span class="p-1.5 bg-gray-600 rounded-full text-white shadow-lg"><i class="ph ph-eye-slash text-xs"></i></span>` : '';
+            controls.innerHTML = `
             ${hiddenBadge}
-            <button onclick="openModal('item', null, ${parentIndex}, ${index})" class="p-1.5 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-500"><i class="ph ph-pencil-simple text-xs"></i></button>
-            <button onclick="deleteItem(${parentIndex}, ${index})" class="p-1.5 bg-red-600 rounded-full text-white shadow-lg hover:bg-red-500"><i class="ph ph-trash text-xs"></i></button>
+            <button class="p-1.5 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-500" data-action="edit-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-pencil-simple text-xs"></i></button>
+            <button class="p-1.5 bg-red-600 rounded-full text-white shadow-lg hover:bg-red-500" data-action="delete-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-trash text-xs"></i></button>
         `;
-        wrapper.appendChild(controls);
-    }
+            controls.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('button[data-action]');
+                if (!btn) return;
+                const p = parseInt(btn.getAttribute('data-parent'));
+                const i = parseInt(btn.getAttribute('data-index'));
+                const act = btn.getAttribute('data-action');
+                if (act === 'edit-item') openModal('item', null, p, i);
+                else if (act === 'delete-item') deleteItem(p, i);
+            });
+            wrapper.appendChild(controls);
+        }
 
     if (item.url_private) {
         const containerClass = isEditMode ? "nav-item opacity-80 cursor-grab" : "nav-item";
@@ -583,8 +613,8 @@ function showHelp() {
     }
 
     const helpHtml = `
-        <div id="help-modal" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0" onclick="this.remove()">
-            <div class="modal-glass rounded-2xl p-8 w-full max-w-lg transform scale-95 transition-transform duration-300 shadow-2xl text-white" onclick="event.stopPropagation()">
+        <div id="help-modal" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+            <div class="modal-glass rounded-2xl p-8 w-full max-w-lg transform scale-95 transition-transform duration-300 shadow-2xl text-white">
                 <h3 class="text-2xl font-bold mb-4 flex items-center gap-2">
                     <i class="ph ph-info"></i> <span>Commands & Help</span>
                 </h3>
@@ -600,7 +630,7 @@ function showHelp() {
                     </div>
                 </div>
                 <div class="mt-8 flex justify-end">
-                    <button onclick="document.getElementById('help-modal').remove()" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-all">Got it</button>
+                    <button id="help-close-btn" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-all">Got it</button>
                 </div>
             </div>
         </div>
@@ -613,6 +643,12 @@ function showHelp() {
             el.classList.remove('opacity-0');
             el.firstElementChild.classList.remove('scale-95');
             el.firstElementChild.classList.add('scale-100');
+            // Close handlers without inline JS
+            el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+            const inner = el.firstElementChild;
+            if (inner) inner.addEventListener('click', (e) => e.stopPropagation());
+            const closeBtn = document.getElementById('help-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => el.remove());
         }
     });
 }
