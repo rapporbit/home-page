@@ -10,16 +10,6 @@ const CACHE_KEY = "nav_config_cache";
 const LAST_SYNC_KEY = "nav_last_sync";
 const CUSTOM_CONFIG_KEY = "nav_custom_config_url";
 const WALLPAPER_KEY = "nav_wallpaper_url";
-const ICON_WEIGHT_KEY = "nav_icon_weight"; // 'regular' | 'thin' | 'light' | 'bold' | 'fill' | 'duotone'
-
-const ICON_WEIGHT_TO_FAMILY = {
-    regular: 'Phosphor',
-    thin: 'Phosphor-Thin',
-    light: 'Phosphor-Light',
-    bold: 'Phosphor-Bold',
-    fill: 'Phosphor-Fill',
-    duotone: 'Phosphor-Duotone'
-};
 
 let globalData = { categories: [], search: [] };
 let isEditMode = false;
@@ -46,11 +36,6 @@ async function init() {
     bind('btn-close-editor', closeModal);
     bind('btn-save-editor', saveModal);
     initTooltipDelegation();
-
-    // Apply preferred icon weight (global override via body class)
-    injectIconWeightStyles();
-    const preferred = (localStorage.getItem(ICON_WEIGHT_KEY) || 'regular');
-    applyIconWeight(preferred);
     applyStoredWallpaper();
     updateTime();
     setInterval(updateTime, 1000);
@@ -743,7 +728,6 @@ function showHelp() {
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>config [url]</code> &nbsp; Set remote config URL</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>reset</code> &nbsp; Reset to default</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>help</code> &nbsp; Show this message</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>weight [thin|light|regular|bold|fill|duotone]</code> &nbsp; Icon weight</p>
                     <div class="pt-4 border-t border-white/10 text-xs opacity-60">
                         Tips: Click the clock to open this menu.<br>
                         In Edit Mode, use the eye icon to hide/show items.
@@ -771,42 +755,6 @@ function showHelp() {
             if (closeBtn) closeBtn.addEventListener('click', () => el.remove());
         }
     });
-}
-
-// ==========================================
-// Icon Weight: global override via body class + injected CSS
-// ==========================================
-function injectIconWeightStyles() {
-    if (document.getElementById('icon-weight-style')) return;
-    const css = `
-    .phw-regular .ph { font-family: "Phosphor" !important; }
-    .phw-thin .ph { font-family: "Phosphor-Thin" !important; }
-    .phw-light .ph { font-family: "Phosphor-Light" !important; }
-    .phw-bold .ph { font-family: "Phosphor-Bold" !important; }
-    .phw-fill .ph { font-family: "Phosphor-Fill" !important; }
-    .phw-duotone .ph { font-family: "Phosphor-Duotone" !important; }
-    `;
-    const style = document.createElement('style');
-    style.id = 'icon-weight-style';
-    style.textContent = css;
-    document.head.appendChild(style);
-}
-
-function applyIconWeight(weight) {
-    const body = document.body;
-    const valid = Object.keys(ICON_WEIGHT_TO_FAMILY);
-    const w = valid.includes(weight) ? weight : 'regular';
-    // Remove previous
-    body.classList.forEach(cls => { if (cls.startsWith('phw-')) body.classList.remove(cls); });
-    body.classList.add('phw-' + w);
-}
-
-function setIconWeight(weight) {
-    const valid = Object.keys(ICON_WEIGHT_TO_FAMILY);
-    if (!valid.includes(weight)) { showToast('Invalid weight', 'error'); return; }
-    localStorage.setItem(ICON_WEIGHT_KEY, weight);
-    applyIconWeight(weight);
-    showToast('Icon weight: ' + weight, 'success');
 }
 
 // Global action delegation to ensure edit/delete always work (even if elements re-render)
@@ -1018,18 +966,6 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
         if (val === '>sync') { forceSync(); e.target.value = ''; return; }
         if (val === '>reset') { if (confirm("Reset?")) { localStorage.clear(); location.reload(); } e.target.value = ''; return; }
         if (val === '>help') { showHelp(); e.target.value = ''; return; }
-        if (val === '>weight') {
-            const current = localStorage.getItem(ICON_WEIGHT_KEY) || 'regular';
-            showToast('Current weight: ' + current + ' (thin|light|regular|bold|fill|duotone)', 'info');
-            e.target.value = '';
-            return;
-        }
-        if (val.startsWith('>weight ')) {
-            const w = val.split(/\s+/)[1];
-            setIconWeight(w);
-            e.target.value = '';
-            return;
-        }
 
         window.open(searchEngines[currentEngineIndex].url + encodeURIComponent(val), '_blank');
         e.target.value = '';
