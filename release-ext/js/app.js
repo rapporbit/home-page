@@ -10,6 +10,13 @@ const CACHE_KEY = "nav_config_cache";
 const LAST_SYNC_KEY = "nav_last_sync";
 const CUSTOM_CONFIG_KEY = "nav_custom_config_url";
 const WALLPAPER_KEY = "nav_wallpaper_url";
+// --- Simple Gist Sync (minimal) ---
+const GIST_ID_KEY = 'gist_id';
+const GIST_FILE_KEY = 'gist_filename';
+const GIST_TOKEN_KEY = 'gist_token';
+const GIST_LAST_PULL = 'gist_last_pull';
+const GIST_LAST_PUSH = 'gist_last_push';
+// (Sync removed) — starting over from local-only persistence
 const ICON_WEIGHT_KEY = "nav_icon_weight"; // 'regular' | 'thin' | 'light' | 'bold' | 'fill' | 'duotone'
 
 const ICON_WEIGHT_TO_FAMILY = {
@@ -83,6 +90,7 @@ async function init() {
         if (hasCustomConfig) forceSync();
         else setTimeout(() => { processConfigData(fallbackData, true); updateStatus("Default Data"); }, 500);
     }
+    // Sync removed; initialization completes here
 }
 
 // ==========================================
@@ -210,9 +218,34 @@ function processConfigData(data, shouldSort = true) {
         });
     }
 
+    // Ensure every category and item has a stable id (for future overlay diff)
+    ensureStableIds(categories);
+
     globalData = { categories, search: engines };
     initSearchEngines(engines);
     renderGrid();
+}
+
+// ---------------- ID utilities (Step 1 of new sync)
+function generateId(prefix = 'id') {
+    // Prefer crypto if available
+    try {
+        const buf = new Uint8Array(8);
+        crypto.getRandomValues(buf);
+        const hex = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${prefix}_${hex}`;
+    } catch {
+        return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    }
+}
+
+function ensureStableIds(categories) {
+    (categories || []).forEach((cat) => {
+        if (!cat.id) cat.id = generateId('cat');
+        if (Array.isArray(cat.items)) {
+            cat.items.forEach((it) => { if (!it.id) it.id = generateId('item'); });
+        }
+    });
 }
 
 function renderGrid() {
@@ -652,13 +685,16 @@ function saveModal() {
         const oldColSpan = selfIdx !== null ? (globalData.categories[selfIdx].colSpan || 1) : 1;
         const oldRowSpan = selfIdx !== null ? (globalData.categories[selfIdx].rowSpan || 1) : 1;
 
+        const oldId = selfIdx !== null ? (globalData.categories[selfIdx].id) : null;
+
         const newCat = {
             category: name,
             color: color,
             hidden: oldHidden,
             colSpan: oldColSpan,
             rowSpan: oldRowSpan,
-            items: selfIdx !== null ? globalData.categories[selfIdx].items : []
+            items: selfIdx !== null ? globalData.categories[selfIdx].items : [],
+            id: oldId || generateId('cat')
         };
 
         if (selfIdx !== null) globalData.categories[selfIdx] = { ...globalData.categories[selfIdx], ...newCat };
@@ -669,7 +705,10 @@ function saveModal() {
         const icon = document.getElementById('inp-icon').value;
         const hidden = document.getElementById('inp-hidden').checked;
 
-        const newItem = { name, url, icon, hidden };
+        const prev = (selfIdx !== null && globalData.categories[parentIdx] && globalData.categories[parentIdx].items)
+            ? globalData.categories[parentIdx].items[selfIdx]
+            : null;
+        const newItem = { name, url, icon, hidden, id: (prev && prev.id) || generateId('item') };
         if (urlPrivate) newItem.url_private = urlPrivate;
 
         if (!globalData.categories[parentIdx].items) globalData.categories[parentIdx].items = [];
@@ -697,29 +736,101 @@ function deleteCategory(idx) {
 
 function exportYaml() {
     try {
-        const exportObj = {
-            search: globalData.search,
-            categories: globalData.categories.map((c, i) => {
-                const catObj = {
-                    category: c.category,
-                    color: c.color,
-                    order: i + 1,
-                    colSpan: c.colSpan || 1,
-                    rowSpan: c.rowSpan || 1
-                };
-                if (c.hidden) catObj.hidden = true;
-                catObj.items = (c.items || []).map(item => {
-                    const cleanItem = { name: item.name, url: item.url, icon: item.icon };
-                    if (item.url_private) cleanItem.url_private = item.url_private;
-                    if (item.hidden) cleanItem.hidden = true;
-                    return cleanItem;
-                });
-                return catObj;
-            })
-        };
-        const yamlStr = jsyaml.dump(exportObj);
+        const yamlStr = buildExportYaml();
         navigator.clipboard.writeText(yamlStr).then(() => showToast("YAML config copied!", "success"));
     } catch (e) { console.error(e); showToast("Export failed", "error"); }
+}
+
+function buildExportYaml() {
+    const exportObj = {
+        search: globalData.search,
+        categories: globalData.categories.map((c, i) => {
+            const catObj = {
+                category: c.category,
+                color: c.color,
+                order: i + 1,
+                colSpan: c.colSpan || 1,
+                rowSpan: c.rowSpan || 1
+            };
+            if (c.hidden) catObj.hidden = true;
+            catObj.items = (c.items || []).map(item => {
+                const cleanItem = { name: item.name, url: item.url, icon: item.icon };
+                if (item.url_private) cleanItem.url_private = item.url_private;
+                if (item.hidden) cleanItem.hidden = true;
+                return cleanItem;
+            });
+            return catObj;
+        })
+    };
+    return jsyaml.dump(exportObj);
+}
+
+function getGistConfig() {
+    return {
+        id: localStorage.getItem(GIST_ID_KEY) || '',
+        file: localStorage.getItem(GIST_FILE_KEY) || '',
+        token: localStorage.getItem(GIST_TOKEN_KEY) || ''
+    };
+}
+
+async function gistPull() {
+    const { id, file, token } = getGistConfig();
+    if (!id || !file) { showToast('Gist not configured. Use >gist set <id> <filename>', 'error'); return; }
+    try {
+        const res = await fetch(`https://api.github.com/gists/${encodeURIComponent(id)}`, {
+            headers: {
+                'Accept': 'application/vnd.github+json',
+                ...(token ? { 'Authorization': `token ${token}` } : {})
+            }
+        });
+        if (!res.ok) throw new Error('Gist fetch failed');
+        const data = await res.json();
+        const f = data.files && data.files[file];
+        if (!f) throw new Error('File not found in gist');
+        let text = '';
+        if (f.truncated && f.raw_url) {
+            const raw = await fetch(f.raw_url);
+            if (!raw.ok) throw new Error('Raw fetch failed');
+            text = await raw.text();
+        } else {
+            text = f.content || '';
+        }
+        const parsed = jsyaml.load(text);
+        processConfigData(parsed, true);
+        saveToLocal(globalData);
+        localStorage.setItem(GIST_LAST_PULL, String(Date.now()));
+        updateStatus('Gist Pulled');
+        showToast('Pulled from Gist', 'success');
+    } catch (e) {
+        console.error(e);
+        showToast('Gist pull failed: ' + (e.message || e), 'error');
+    }
+}
+
+async function gistPush(message = 'Update from extension') {
+    const { id, file, token } = getGistConfig();
+    if (!id || !file) { showToast('Gist not configured. Use >gist set <id> <filename>', 'error'); return; }
+    if (!token) { showToast('Set token first: >gist token <PAT>', 'error'); return; }
+    try {
+        const content = buildExportYaml();
+        const body = { files: { [file]: { content } }, description: undefined }; // keep description unchanged
+        const res = await fetch(`https://api.github.com/gists/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: {
+                'Accept': 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'Authorization': `token ${token}`
+            },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('Gist push failed');
+        localStorage.setItem(GIST_LAST_PUSH, String(Date.now()));
+        updateStatus('Gist Pushed');
+        showToast('Pushed to Gist', 'success');
+    } catch (e) {
+        console.error(e);
+        showToast('Gist push failed: ' + (e.message || e), 'error');
+    }
 }
 
 // ==========================================
@@ -866,6 +977,12 @@ async function forceSync() {
 }
 
 function saveToLocal(data) { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }
+
+// (Sync removed) — local save only
+
+function safeSig(obj) {
+    try { return JSON.stringify(obj).length + ':' + Object.keys(obj||{}).length; } catch { return ''; }
+}
 function applyStoredWallpaper() {
     const stored = localStorage.getItem(WALLPAPER_KEY);
     if (!stored) return; // Never fetch on refresh; only apply if we have one
@@ -989,12 +1106,12 @@ function initSearchEngines(engines) {
     if (searchEngines.length === 0) searchEngines = defaultEngines;
     searchEngines.forEach((engine, index) => {
         const btn = document.createElement('button');
-        btn.className = `p-2 hover:bg-white/20 rounded-lg transition-colors text-white/80 ${index === 0 ? 'engine-active' : ''}`;
+        btn.className = `p-2 hover:bg-white/20 rounded-lg transition-colors text-white/80 flex items-center justify-center ${index === 0 ? 'engine-active' : ''}`;
         btn.onclick = () => switchEngine(index);
         // Make right-side engine icons larger while keeping the input height unchanged
         btn.innerHTML = engine.icon?.startsWith('ph-')
-            ? `<i class="ph ${engine.icon} text-xl"></i>`
-            : `<span class="font-bold text-lg">${engine.icon || 'S'}</span>`;
+            ? `<i class="ph ${engine.icon} text-xl leading-none"></i>`
+            : `<span class="font-bold text-lg leading-none">${engine.icon || 'S'}</span>`;
         container.appendChild(btn);
     });
     switchEngine(0);
@@ -1018,6 +1135,36 @@ document.getElementById('search-input').addEventListener('keydown', (e) => {
         if (val === '>sync') { forceSync(); e.target.value = ''; return; }
         if (val === '>reset') { if (confirm("Reset?")) { localStorage.clear(); location.reload(); } e.target.value = ''; return; }
         if (val === '>help') { showHelp(); e.target.value = ''; return; }
+        // --- Simple Gist commands ---
+        if (val.startsWith('>gist token ')) {
+            const token = val.substring('>gist token '.length).trim();
+            if (!token) { showToast('Usage: >gist token <token>', 'error'); e.target.value=''; return; }
+            localStorage.setItem(GIST_TOKEN_KEY, token);
+            showToast('Gist token set', 'success');
+            e.target.value = '';
+            return;
+        }
+        if (val.startsWith('>gist set ')) {
+            const rest = val.substring('>gist set '.length).trim();
+            const parts = rest.split(/\s+/);
+            if (parts.length < 2) { showToast('Usage: >gist set <id> <filename>', 'error'); e.target.value=''; return; }
+            localStorage.setItem(GIST_ID_KEY, parts[0]);
+            localStorage.setItem(GIST_FILE_KEY, parts.slice(1).join(' '));
+            showToast('Gist target set', 'success');
+            e.target.value = '';
+            return;
+        }
+        if (val === '>gist pull') { gistPull(); e.target.value = ''; return; }
+        if (val === '>gist push') { gistPush(); e.target.value = ''; return; }
+        if (val === '>gist status') {
+            const { id, file, token } = getGistConfig();
+            const lastPull = localStorage.getItem(GIST_LAST_PULL);
+            const lastPush = localStorage.getItem(GIST_LAST_PUSH);
+            showToast(`Gist: ${id||'-'}/${file||'-'} | token: ${token? 'set': 'none'} | pull: ${lastPull? new Date(parseInt(lastPull)).toLocaleString(): '-' } | push: ${lastPush? new Date(parseInt(lastPush)).toLocaleString(): '-'}`, 'info', { duration: 5000 });
+            e.target.value = '';
+            return;
+        }
+        // (Sync removed) overlay commands disabled
         if (val === '>weight') {
             const current = localStorage.getItem(ICON_WEIGHT_KEY) || 'regular';
             showToast('Current weight: ' + current + ' (thin|light|regular|bold|fill|duotone)', 'info');
