@@ -989,12 +989,12 @@ function initSearchEngines(engines) {
     if (searchEngines.length === 0) searchEngines = defaultEngines;
     searchEngines.forEach((engine, index) => {
         const btn = document.createElement('button');
-        btn.className = `p-2 hover:bg-white/20 rounded-lg transition-colors text-white/80 ${index === 0 ? 'engine-active' : ''}`;
+        btn.className = `p-2 hover:bg-white/20 rounded-lg transition-colors text-white/80 flex items-center justify-center ${index === 0 ? 'engine-active' : ''}`;
         btn.onclick = () => switchEngine(index);
         // Make right-side engine icons larger while keeping the input height unchanged
         btn.innerHTML = engine.icon?.startsWith('ph-')
-            ? `<i class="ph ${engine.icon} text-xl"></i>`
-            : `<span class="font-bold text-lg">${engine.icon || 'S'}</span>`;
+            ? `<i class="ph ${engine.icon} text-xl leading-none"></i>`
+            : `<span class="font-bold text-lg leading-none">${engine.icon || 'S'}</span>`;
         container.appendChild(btn);
     });
     switchEngine(0);
