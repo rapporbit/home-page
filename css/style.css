@@ -53,7 +53,8 @@ body {
    ========================================= */
 
 .glass-panel {
-    background: rgba(255, 255, 255, 0.15);
+    /* Use background-color so Tailwind gradient background-image can layer on top */
+    background-color: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.2);

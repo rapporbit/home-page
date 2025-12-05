@@ -82,7 +82,6 @@ function buildCategoryCard(group) {
 
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'resize-handle';
-    resizeHandle.title = 'Drag to resize (Desktop only)';
     resizeHandle.setAttribute('data-cat-id', group.id);
     resizeHandle.setAttribute('data-action', 'resize-cat');
     card.appendChild(resizeHandle);
