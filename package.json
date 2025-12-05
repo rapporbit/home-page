@@ -4,9 +4,10 @@
   "description": "一个极简、高颜值、功能强大的浏览器起始页。支持拖拽布局、卡片缩放、远程配置同步、内网网址切换等功能。",
   "main": "index.js",
   "scripts": {
-    "build:css": "tailwindcss -i ./src/tw.css -o ./dist/app.css -c ./tailwind.config.js -m",
+    "clean": "node ./scripts/clean.js",
+    "build:css": "mkdir -p dist && tailwindcss -i ./src/tw.css -o ./dist/app.css -c ./tailwind.config.js -m",
     "build": "npm run build:css",
-    "build:release": "npm run build && bash ./scripts/build-release.sh",
+    "build:release": "npm run clean && npm run build && bash ./scripts/build-release.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

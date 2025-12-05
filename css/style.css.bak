@@ -278,11 +278,3 @@ body {
 
 /* Slightly highlight delete chip on card hover (still always visible) */
 .group:hover .delete-chip { opacity: 1; }
-
-/* Icon Weights */
-.phw-regular .ph { font-family: "Phosphor" !important; }
-.phw-thin .ph { font-family: "Phosphor-Thin" !important; }
-.phw-light .ph { font-family: "Phosphor-Light" !important; }
-.phw-bold .ph { font-family: "Phosphor-Bold" !important; }
-.phw-fill .ph { font-family: "Phosphor-Fill" !important; }
-.phw-duotone .ph { font-family: "Phosphor-Duotone" !important; }

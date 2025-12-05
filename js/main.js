@@ -3,19 +3,20 @@ import { applyStoredWallpaper, setBingBackground } from './modules/wallpaper.js'
 import { initTooltipDelegation } from './modules/tooltip.js';
 import { processConfigData, fallbackData } from './modules/config.js';
 import { KEYS } from './modules/storage.js';
-import { injectIconWeightStyles, applyIconWeight } from './modules/icons.js';
+import { applyIconWeight } from './modules/icons.js';
 import { toggleEditMode, refreshEditBindings, closeEditor, saveEditor } from './modules/edit.js';
 import { openImportModal, closeImportModal, importYaml } from './modules/importExport.js';
 import { updateFolderScrollAreaHeight } from './modules/layout.js';
 import { bindGistSettingsUI } from './modules/gist.js';
+import { getSettings } from './modules/settings.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 基础 UI & 行为
   initTooltipDelegation();
   startClock();
 
-  injectIconWeightStyles();
-  applyIconWeight(localStorage.getItem(KEYS.iconWeight) || 'regular');
+  const { iconWeight } = getSettings();
+  applyIconWeight(iconWeight || 'regular');
 
   applyStoredWallpaper();
   document.getElementById('wallpaper-button')?.addEventListener('click', () => setBingBackground(true));
