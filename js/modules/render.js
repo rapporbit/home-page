@@ -140,15 +140,18 @@ function createItemElement(group, item) {
     wrapper.appendChild(container);
     bindPrivateToggle(wrapper, item);
   } else {
-    const link = document.createElement('a');
+    const editMode = isEditMode();
+    const interactiveTag = editMode ? 'button' : 'a';
+    const link = document.createElement(interactiveTag);
     link.className =
       'nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20' +
-      (isEditMode() ? ' cursor-pointer opacity-80' : '');
-    if (!isEditMode()) {
+      (editMode ? ' cursor-pointer opacity-80' : '');
+    if (!editMode) {
       link.target = '_blank';
+      link.rel = 'noopener noreferrer';
       link.href = item.url;
     } else {
-      link.href = 'javascript:void(0)';
+      link.type = 'button';
     }
     link.setAttribute('data-tooltip', item.name || '');
     const icon = document.createElement('i');

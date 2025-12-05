@@ -19,20 +19,7 @@
     <!-- 本地脚本库 -->
     <script src="vendor/js-yaml.min.js"></script>
     <script src="vendor/Sortable.min.js"></script>
-    <script>
-        (function () {
-            try {
-                const s = localStorage.getItem('nav_wallpaper_url');
-                if (s) {
-                    let u = s;
-                    if (s.startsWith('{')) { try { u = JSON.parse(s).url; } catch { } }
-                    if (u) document.documentElement.style.setProperty('--wallpaper-url', `url("${u}")`);
-                }
-                const w = localStorage.getItem('nav_icon_weight');
-                if (w) document.documentElement.classList.add('phw-' + w);
-            } catch { }
-        })();
-    </script>
+    <script src="js/pre-init.js"></script>
 </head>
 
 <body class="min-h-screen text-white selection:bg-pink-500 selection:text-white">
@@ -202,7 +189,15 @@
 
     <footer class="relative z-10 mt-0 mb-12 md:mb-16 text-center text-white/40 text-sm font-medium">
         <span id="bing-copyright">Image by Bing</span> | <span id="data-source">Local Data</span> | <a
-            href="https://github.com/rapporbit/simple-start-page">Github</a> | <a href="javascript:void(0)" id="open-gist-settings">Settings</a> | <a href="javascript:void(0)" id="footer-edit-toggle">Edit</a>
+            href="https://github.com/rapporbit/home-page">Github</a> |
+        <button type="button" id="open-gist-settings"
+            class="text-white/70 hover:text-white font-semibold bg-transparent border-0 focus-visible:outline-none inline-flex items-center gap-1">
+            Settings
+        </button> |
+        <button type="button" id="footer-edit-toggle"
+            class="text-white/70 hover:text-white font-semibold bg-transparent border-0 focus-visible:outline-none inline-flex items-center gap-1">
+            Edit
+        </button>
     </footer>
 
     <!-- Gist Settings Modal (inline, consistent style) -->
