@@ -22,7 +22,7 @@
 git clone https://github.com/rapporbit/simple-start-page.git
 cd simple-start-page
 npm install          # 安装 Tailwind / PostCSS
-npm run build        # 重新生成 dist/app.css
+npm run build        # 生成 dist/app.css + public/ 用于部署
 ```
 
 执行完毕后直接在浏览器中打开 `index.html`，或部署到任意静态托管（Vercel、Netlify、GitHub Pages 等）。
@@ -36,6 +36,7 @@ npm run build        # 重新生成 dist/app.css
 ### 3. 定制与部署
 
 - 如果希望与团队共享，可将构建后的文件部署到静态服务器，同时在 `manifest.json` 里把 `homepage` 或覆盖地址改成你的域名。
+- Vercel / 静态托管：仓库内的 `vercel.json` 会在构建时运行 `npm run build` 并输出 `public/`，只需在 Vercel 控制台选择该仓库即可自动产出站点。
 - 项目无后端依赖，仅需任意 HTTP 服务即可。
 
 ## ⚙️ 配置与同步
@@ -94,7 +95,7 @@ categories:
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm run build` | 调用 `tailwindcss` 读取 `src/tw.css`，输出压缩后的 `dist/app.css`。 |
+| `npm run build` | 调用 `tailwindcss` 读取 `src/tw.css`，生成 `dist/app.css` 并同步打包静态资源到 `public/`。 |
 | `npm run build:css` | 单独构建 CSS（与 `build` 等价）。 |
 | `npm run clean` | 清理 `dist/`、`release-ext/` 以及旧的 `release-ext-*.zip`。 |
 | `npm run build:release` | 清理 + 构建 CSS + 拷贝静态资源到 `release-ext/` 并生成 zip，便于 Chrome 扩展商店或离线安装。 |

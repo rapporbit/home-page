@@ -6,7 +6,7 @@
   "scripts": {
     "clean": "node ./scripts/clean.js",
     "build:css": "mkdir -p dist && tailwindcss -i ./src/tw.css -o ./dist/app.css -c ./tailwind.config.js -m",
-    "build": "npm run build:css",
+    "build": "npm run build:css && node ./scripts/build-public.js",
     "build:release": "npm run clean && npm run build && bash ./scripts/build-release.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -5,6 +5,7 @@ node_modules/
 dist/
 release-ext/
 release-ext*.zip
+public/
 
 # OS / editor junk
 .DS_Store
@@ -12,4 +13,3 @@ release-ext*.zip
 
 # Generated archives
 *.zip
-

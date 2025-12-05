@@ -11,7 +11,7 @@ function remove(targetPath) {
   }
 }
 
-['dist', 'release-ext'].forEach((dir) => {
+['dist', 'release-ext', 'public'].forEach((dir) => {
   remove(path.join(root, dir));
 });
 
