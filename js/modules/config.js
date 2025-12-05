@@ -21,7 +21,7 @@ export function processConfigData(data, shouldSort = true) {
     });
   }
   ensureStableIds(categories);
-  setData(categories, engines);
+  setData(categories, engines, { persist: shouldSort });
   initSearchEngines(engines);
   renderGrid();
 }
