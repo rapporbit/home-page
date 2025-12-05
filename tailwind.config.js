@@ -26,6 +26,12 @@ module.exports = {
     'from-red-600/20', 'to-pink-600/20',
     'from-purple-600/20', 'to-fuchsia-600/20',
     'from-orange-600/20', 'to-yellow-600/20',
+    // Fixed button widths used in Settings/Test buttons
+    'w-16', 'w-24', 'w-28', 'w-32', 'w-36', 'w-40',
+    // Small edit-mode delete button utilities
+    '-top-1', '-right-1',
+    'p-0.5',
+    'text-[10px]',
   ],
   theme: {
     extend: {

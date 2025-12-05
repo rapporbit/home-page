@@ -205,6 +205,15 @@ body {
     cursor: not-allowed;
 }
 
+/* One-off spin animation for icons */
+@keyframes spin-once {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin-once {
+    animation: spin-once 0.3s linear 1;
+}
+
 /* Custom tooltip for truncated bookmark names */
 .nav-tooltip {
     position: fixed;

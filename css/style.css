@@ -205,6 +205,15 @@ body {
     cursor: not-allowed;
 }
 
+/* One-off spin animation for icons */
+@keyframes spin-once {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin-once {
+    animation: spin-once 0.3s linear 1;
+}
+
 /* Custom tooltip for truncated bookmark names */
 .nav-tooltip {
     position: fixed;
@@ -232,3 +241,21 @@ body {
     opacity: 1;
     transform: translateY(0);
 }
+
+/* Small circular delete button used in edit mode */
+.delete-chip {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px; /* full */
+    padding: 0; /* keep tiny */
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    /* important: avoid blur cost on many items */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+}
+.delete-chip i { font-size: 10px; line-height: 10px; }

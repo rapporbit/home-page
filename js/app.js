@@ -1,23 +1,23 @@
 // ==========================================
 // Constants & State
 // ==========================================
-const DEFAULT_CONFIG_URL = "https://gist.githubusercontent.com/gist-user/example/raw/nav-config-v2.yml";
 // Bing Biturl API (JSON -> static Bing image URL)
 const BITURL_API = "https://bing.biturl.top/";
 const BITURL_DEFAULT_RES = "UHD"; // 1366, 1920, 3840, UHD
 const BITURL_DEFAULT_MKT = "zh-CN";
-const CACHE_KEY = "nav_config_cache";
-const LAST_SYNC_KEY = "nav_last_sync";
-const CUSTOM_CONFIG_KEY = "nav_custom_config_url";
-const WALLPAPER_KEY = "nav_wallpaper_url";
-// --- Simple Gist Sync (minimal) ---
-const GIST_ID_KEY = 'gist_id';
-const GIST_FILE_KEY = 'gist_filename';
-const GIST_TOKEN_KEY = 'gist_token';
-const GIST_LAST_PULL = 'gist_last_pull';
-const GIST_LAST_PUSH = 'gist_last_push';
-// (Sync removed) — starting over from local-only persistence
-const ICON_WEIGHT_KEY = "nav_icon_weight"; // 'regular' | 'thin' | 'light' | 'bold' | 'fill' | 'duotone'
+// Keys centralized
+const KEYS = {
+    cache: 'nav_config_cache',
+    wallpaper: 'nav_wallpaper_url',
+    iconWeight: 'nav_icon_weight',
+    gist: {
+        id: 'gist_id',
+        file: 'gist_filename',
+        token: 'gist_token',
+        lastPull: 'gist_last_pull',
+        lastPush: 'gist_last_push'
+    }
+};
 
 const ICON_WEIGHT_TO_FAMILY = {
     regular: 'Phosphor',
@@ -45,18 +45,34 @@ async function init() {
         const el = document.getElementById(id);
         if (el) el.addEventListener('click', handler);
     };
-    bind('btn-open-import', openImportModal);
-    bind('btn-export-yaml', exportYaml);
+    // Import/Copy now live in Gist Settings UI
     bind('btn-done-edit', () => toggleEditMode(false));
     bind('btn-close-import', closeImportModal);
     bind('btn-import-apply', importYaml);
     bind('btn-close-editor', closeModal);
     bind('btn-save-editor', saveModal);
     initTooltipDelegation();
+    bindGistSettingsUI();
+
+    // In edit mode, clicking outside the folder grid exits edit mode
+    // Use bubbling phase so element-specific handlers run first;
+    // avoids re-entering edit mode when clicking the footer Edit button.
+    document.addEventListener('click', (e) => {
+        if (!isEditMode) return;
+        // Ignore clicks inside any modal overlays/contents
+        const inModal = e.target.closest('#gist-modal, #import-modal, #editor-modal, #help-modal, #confirm-modal');
+        if (inModal) return;
+        // Ignore footer Edit button itself to avoid instant toggle-off
+        const onFooterEdit = e.target.closest('#footer-edit-toggle');
+        if (onFooterEdit) return;
+        // Only keep edit mode when clicking inside the grid area
+        const inGrid = e.target.closest('#grid-container');
+        if (!inGrid) toggleEditMode(false);
+    }, false);
 
     // Apply preferred icon weight (global override via body class)
     injectIconWeightStyles();
-    const preferred = (localStorage.getItem(ICON_WEIGHT_KEY) || 'regular');
+    const preferred = (localStorage.getItem(KEYS.iconWeight) || 'regular');
     applyIconWeight(preferred);
     applyStoredWallpaper();
     updateTime();
@@ -76,19 +92,22 @@ async function init() {
 
     const wallpaperButton = document.getElementById('wallpaper-button');
     if (wallpaperButton) wallpaperButton.addEventListener('click', () => setBingBackground(true));
+    const footerEdit = document.getElementById('footer-edit-toggle');
+    if (footerEdit) footerEdit.addEventListener('click', () => toggleEditMode());
 
-    const cachedData = localStorage.getItem(CACHE_KEY);
-    const hasCustomConfig = localStorage.getItem(CUSTOM_CONFIG_KEY);
-
+    const cachedData = localStorage.getItem(KEYS.cache);
     if (cachedData) {
         try {
             const parsed = JSON.parse(cachedData);
             processConfigData(parsed, false);
-            updateStatus(hasCustomConfig ? "Local Cache (Custom)" : "Local Cache (Default)");
-        } catch (e) { forceSync(); }
+            updateStatus("Local Data");
+        } catch (e) {
+            processConfigData(fallbackData, true);
+            updateStatus("Default Data");
+        }
     } else {
-        if (hasCustomConfig) forceSync();
-        else setTimeout(() => { processConfigData(fallbackData, true); updateStatus("Default Data"); }, 500);
+        processConfigData(fallbackData, true);
+        updateStatus("Default Data");
     }
     // Sync removed; initialization completes here
 }
@@ -98,6 +117,10 @@ async function init() {
 // ==========================================
 let tooltipEl = null;
 let tooltipTarget = null;
+let tooltipRaf = 0, tooltipNextX = 0, tooltipNextY = 0;
+// Track whether to return to Settings after closing Import modal
+let shouldReturnToSettings = false;
+let importClosingByApply = false;
 
 function ensureTooltip() {
     if (!tooltipEl) {
@@ -166,7 +189,13 @@ function initTooltipDelegation() {
 
     document.addEventListener('mousemove', (e) => {
         if (!tooltipEl || !tooltipEl.classList.contains('show')) return;
-        if (tooltipTarget) positionTooltipAt(e.clientX, e.clientY);
+        tooltipNextX = e.clientX; tooltipNextY = e.clientY;
+        if (!tooltipRaf) {
+            tooltipRaf = requestAnimationFrame(() => {
+                positionTooltipAt(tooltipNextX, tooltipNextY);
+                tooltipRaf = 0;
+            });
+        }
     }, true);
 
     document.addEventListener('mouseout', (e) => {
@@ -339,10 +368,12 @@ function renderGrid() {
 
         initSortable();
         document.body.classList.add('edit-mode');
-        document.getElementById('edit-bar').classList.remove('-translate-y-full');
+        const editBar = document.getElementById('edit-bar');
+        if (editBar) editBar.classList.add('hidden');
     } else {
         document.body.classList.remove('edit-mode');
-        document.getElementById('edit-bar').classList.add('-translate-y-full');
+        const editBar = document.getElementById('edit-bar');
+        if (editBar) editBar.classList.add('hidden');
     }
 
     updateFolderScrollAreaHeight();
@@ -378,49 +409,81 @@ function updateFolderScrollAreaHeight() {
 function createItemElement(item, index, parentIndex) {
     const wrapper = document.createElement('div');
     wrapper.setAttribute('data-id', index);
-    wrapper.className = "relative group";
+    wrapper.className = 'relative group';
     if (isEditMode && item.hidden) wrapper.classList.add('is-hidden-element');
 
-        if (isEditMode) {
-            const controls = document.createElement('div');
-            controls.className = "absolute -top-2 -right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity scale-90";
-            const hiddenBadge = item.hidden ? `<span class="p-1.5 bg-gray-600 rounded-full text-white shadow-lg"><i class="ph ph-eye-slash text-xs"></i></span>` : '';
-            controls.innerHTML = `
-            ${hiddenBadge}
-            <button class="p-1.5 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-500" data-action="edit-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-pencil-simple text-xs"></i></button>
-            <button class="p-1.5 bg-red-600 rounded-full text-white shadow-lg hover:bg-red-500" data-action="delete-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-trash text-xs"></i></button>
+    // Edit controls (show only delete button, glass style) and click-to-edit
+    if (isEditMode) {
+        const controls = document.createElement('div');
+        // Slightly tighter position and smaller hit area
+        controls.className = 'absolute -top-1 -right-1 z-20';
+        controls.innerHTML = `
+            <button class="delete-chip text-white/80 hover:text-white" data-action="delete-item" data-parent="${parentIndex}" data-index="${index}">
+                <i class="ph ph-trash"></i>
+            </button>
         `;
-            controls.addEventListener('click', (ev) => {
-                const btn = ev.target.closest('button[data-action]');
-                if (!btn) return;
-                const p = parseInt(btn.getAttribute('data-parent'));
-                const i = parseInt(btn.getAttribute('data-index'));
-                const act = btn.getAttribute('data-action');
-                if (act === 'edit-item') openModal('item', null, p, i);
-                else if (act === 'delete-item') deleteItem(p, i);
-            });
-            wrapper.appendChild(controls);
-        }
+        controls.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const btn = ev.target.closest('button[data-action]');
+            if (!btn) return;
+            const p = parseInt(btn.getAttribute('data-parent'));
+            const i = parseInt(btn.getAttribute('data-index'));
+            deleteItem(p, i);
+        });
+        wrapper.appendChild(controls);
+        // Click anywhere on the bookmark to edit
+        wrapper.addEventListener('click', () => openModal('item', null, parentIndex, index));
+    }
+
+    const sanitizeIcon = (ic) => (/^ph-[a-z0-9-]+$/i.test(ic || '') ? ic : 'ph-link');
 
     if (item.url_private) {
-        const containerClass = isEditMode ? "nav-item opacity-80 cursor-grab" : "nav-item";
-        // Keep same overall height as normal items by using p-2 on container and a compact toggle button
-        wrapper.innerHTML += `
-            <div class="${containerClass} w-full block flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white bg-white/5 hover:bg-white/20 overflow-hidden">
-                <button class="toggle-btn shrink-0 rounded inline-flex items-center justify-center p-0 leading-none hover:bg-white/10 transition-colors" title="Switch: Public / Private">
-                    <i class="ph ${item.icon || 'ph-link'} text-lg opacity-70 main-icon transition-colors"></i>
-                </button>
-                <a href="${isEditMode ? 'javascript:void(0)' : item.url}" ${!isEditMode ? 'target="_blank"' : ''} data-tooltip="${item.name}" class="flex-1 min-w-0 flex items-center">
-                    <span class="truncate w-full block main-text transition-colors">${item.name}</span>
-                </a>
-            </div>`;
-        if (!isEditMode) bindPrivateToggle(wrapper, item);
+        if (isEditMode) {
+            const container = document.createElement('div');
+            container.className = 'nav-item w-full block flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white bg-white/5 hover:bg-white/20 cursor-pointer';
+            const icon = document.createElement('i');
+            icon.className = `ph ${sanitizeIcon(item.icon)} text-lg opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all`;
+            const span = document.createElement('span');
+            span.className = 'truncate';
+            span.textContent = item.name || '';
+            container.appendChild(icon);
+            container.appendChild(span);
+            wrapper.appendChild(container);
+        } else {
+            const container = document.createElement('div');
+            container.className = 'nav-item w-full block flex items-center gap-3 p-0 rounded-xl text-white/90 text-sm font-medium hover:text-white bg-white/5 hover:bg-white/20 overflow-hidden';
+            const toggle = document.createElement('button');
+            toggle.className = 'toggle-btn shrink-0 p-3 hover:bg-white/10 transition-colors';
+            toggle.title = 'Switch: Public / Private';
+            const icon = document.createElement('i');
+            icon.className = `ph ${sanitizeIcon(item.icon)} text-lg opacity-70 main-icon transition-colors`;
+            toggle.appendChild(icon);
+            const link = document.createElement('a');
+            link.className = 'flex-1 p-2 pl-0 min-w-0 block h-full flex items-center';
+            link.target = '_blank'; link.href = item.url;
+            link.setAttribute('data-tooltip', item.name || '');
+            const span = document.createElement('span');
+            span.className = 'truncate w-full block main-text transition-colors';
+            span.textContent = item.name || '';
+            link.appendChild(span);
+            container.appendChild(toggle);
+            container.appendChild(link);
+            wrapper.appendChild(container);
+            bindPrivateToggle(wrapper, item);
+        }
     } else {
-        wrapper.innerHTML += `
-            <a href="${isEditMode ? 'javascript:void(0)' : item.url}" ${!isEditMode ? 'target="_blank"' : ''} data-tooltip="${item.name}" class="nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20 ${isEditMode ? 'cursor-grab opacity-80' : ''}">
-                <i class="ph ${item.icon || 'ph-link'} text-lg opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all"></i>
-                <span class="truncate">${item.name}</span>
-            </a>`;
+        const link = document.createElement('a');
+        link.className = 'nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20' + (isEditMode ? ' cursor-pointer opacity-80' : '');
+        if (!isEditMode) { link.target = '_blank'; link.href = item.url; } else { link.href = 'javascript:void(0)'; }
+        link.setAttribute('data-tooltip', item.name || '');
+        const icon = document.createElement('i');
+        icon.className = `ph ${sanitizeIcon(item.icon)} text-lg opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all`;
+        const span = document.createElement('span');
+        span.className = 'truncate';
+        span.textContent = item.name || '';
+        link.appendChild(icon);
+        link.appendChild(span);
+        wrapper.appendChild(link);
     }
     return wrapper;
 }
@@ -435,9 +498,11 @@ function bindPrivateToggle(wrapper, item) {
     btn.onclick = (e) => {
         e.preventDefault(); e.stopPropagation();
         isPrivate = !isPrivate;
-
-        icon.style.transform = "rotate(360deg)";
-        setTimeout(() => icon.style.transform = "rotate(0deg)", 300);
+        // Animate icon spin
+        icon.classList.remove('spin-once');
+        // force reflow to restart animation
+        void icon.offsetWidth;
+        icon.classList.add('spin-once');
 
         if (isPrivate) {
             link.href = item.url_private;
@@ -526,7 +591,6 @@ function initResizeHandler(e, catIndex) {
 function toggleEditMode(forceState) {
     isEditMode = forceState !== undefined ? forceState : !isEditMode;
     renderGrid();
-    if (isEditMode) showToast("Edit Mode: Drag handle to resize", "info");
 }
 
 function toggleCategoryVisibility(idx) {
@@ -591,7 +655,16 @@ function closeImportModal() {
     importModal.classList.add('opacity-0');
     importModal.firstElementChild.classList.add('scale-95');
     importModal.firstElementChild.classList.remove('scale-100');
-    setTimeout(() => importModal.classList.add('hidden'), 300);
+    setTimeout(() => {
+        importModal.classList.add('hidden');
+        // If import was opened from Settings, always return to Settings (whether canceled or applied)
+        if (shouldReturnToSettings) {
+            openSettingsModal();
+        }
+        // Reset flags
+        shouldReturnToSettings = false;
+        importClosingByApply = false;
+    }, 300);
 }
 
 function importYaml() {
@@ -617,6 +690,8 @@ function importYaml() {
         // Apply
         processConfigData(data, true);
         saveToLocal(globalData);
+        // Mark as applied to avoid returning to Settings automatically
+        importClosingByApply = true;
         closeImportModal();
         showToast("Configuration imported successfully!", "success");
 
@@ -721,14 +796,16 @@ function saveModal() {
     showToast("Saved successfully", "success");
 }
 
-function deleteItem(parentIdx, itemIdx) {
-    if (!confirm("Delete this item?")) return;
+async function deleteItem(parentIdx, itemIdx) {
+    const ok = await showConfirm('Delete Bookmark', 'Are you sure you want to delete this bookmark?', 'Delete', true);
+    if (!ok) return;
     globalData.categories[parentIdx].items.splice(itemIdx, 1);
     saveToLocal(globalData);
     renderGrid();
 }
-function deleteCategory(idx) {
-    if (!confirm("Delete this entire category?")) return;
+async function deleteCategory(idx) {
+    const ok = await showConfirm('Delete Category', 'This will delete the entire category and all bookmarks in it. Continue?', 'Delete', true);
+    if (!ok) return;
     globalData.categories.splice(idx, 1);
     saveToLocal(globalData);
     renderGrid();
@@ -753,12 +830,12 @@ function buildExportYaml() {
                 rowSpan: c.rowSpan || 1
             };
             if (c.hidden) catObj.hidden = true;
-            catObj.items = (c.items || []).map(item => {
-                const cleanItem = { name: item.name, url: item.url, icon: item.icon };
-                if (item.url_private) cleanItem.url_private = item.url_private;
-                if (item.hidden) cleanItem.hidden = true;
-                return cleanItem;
-            });
+    catObj.items = (c.items || []).map((item, j) => {
+        const cleanItem = { name: item.name, url: item.url, icon: item.icon, order: j + 1 };
+        if (item.url_private) cleanItem.url_private = item.url_private;
+        if (item.hidden) cleanItem.hidden = true;
+        return cleanItem;
+    });
             return catObj;
         })
     };
@@ -767,15 +844,22 @@ function buildExportYaml() {
 
 function getGistConfig() {
     return {
-        id: localStorage.getItem(GIST_ID_KEY) || '',
-        file: localStorage.getItem(GIST_FILE_KEY) || '',
-        token: localStorage.getItem(GIST_TOKEN_KEY) || ''
+        id: localStorage.getItem(KEYS.gist.id) || '',
+        file: localStorage.getItem(KEYS.gist.file) || '',
+        token: localStorage.getItem(KEYS.gist.token) || ''
     };
 }
 
 async function gistPull() {
     const { id, file, token } = getGistConfig();
     if (!id || !file) { showToast('Gist not configured. Use >gist set <id> <filename>', 'error'); return; }
+    // Confirm before overwriting local data
+    const ok = await showConfirm(
+        'Pull From Gist',
+        `This will overwrite your local configuration with \n${id}/${file}. Continue?`,
+        'Pull'
+    );
+    if (!ok) { showToast('Canceled', 'info'); return; }
     try {
         const res = await fetch(`https://api.github.com/gists/${encodeURIComponent(id)}`, {
             headers: {
@@ -783,14 +867,18 @@ async function gistPull() {
                 ...(token ? { 'Authorization': `token ${token}` } : {})
             }
         });
-        if (!res.ok) throw new Error('Gist fetch failed');
+        if (!res.ok) {
+            let msg = 'Gist fetch failed';
+            try { const j = await res.json(); if (j && j.message) msg += `: ${j.message}`; } catch {}
+            throw new Error(`${msg} (HTTP ${res.status})`);
+        }
         const data = await res.json();
         const f = data.files && data.files[file];
         if (!f) throw new Error('File not found in gist');
         let text = '';
         if (f.truncated && f.raw_url) {
             const raw = await fetch(f.raw_url);
-            if (!raw.ok) throw new Error('Raw fetch failed');
+            if (!raw.ok) throw new Error(`Raw fetch failed (HTTP ${raw.status})`);
             text = await raw.text();
         } else {
             text = f.content || '';
@@ -798,8 +886,8 @@ async function gistPull() {
         const parsed = jsyaml.load(text);
         processConfigData(parsed, true);
         saveToLocal(globalData);
-        localStorage.setItem(GIST_LAST_PULL, String(Date.now()));
-        updateStatus('Gist Pulled');
+        localStorage.setItem(KEYS.gist.lastPull, String(Date.now()));
+        updateStatus('Gist Pulled', true);
         showToast('Pulled from Gist', 'success');
     } catch (e) {
         console.error(e);
@@ -811,6 +899,14 @@ async function gistPush(message = 'Update from extension') {
     const { id, file, token } = getGistConfig();
     if (!id || !file) { showToast('Gist not configured. Use >gist set <id> <filename>', 'error'); return; }
     if (!token) { showToast('Set token first: >gist token <PAT>', 'error'); return; }
+    // Confirm before overwriting remote data
+    const ok = await showConfirm(
+        'Push To Gist',
+        `This will overwrite the remote Gist file \n${id}/${file} with your current local configuration. Continue?`,
+        'Push',
+        true
+    );
+    if (!ok) { showToast('Canceled', 'info'); return; }
     try {
         const content = buildExportYaml();
         const body = { files: { [file]: { content } }, description: undefined }; // keep description unchanged
@@ -823,9 +919,13 @@ async function gistPush(message = 'Update from extension') {
             },
             body: JSON.stringify(body)
         });
-        if (!res.ok) throw new Error('Gist push failed');
-        localStorage.setItem(GIST_LAST_PUSH, String(Date.now()));
-        updateStatus('Gist Pushed');
+        if (!res.ok) {
+            let msg = 'Gist push failed';
+            try { const j = await res.json(); if (j && j.message) msg += `: ${j.message}`; } catch {}
+            throw new Error(`${msg} (HTTP ${res.status})`);
+        }
+        localStorage.setItem(KEYS.gist.lastPush, String(Date.now()));
+        updateStatus('Gist Pushed', true);
         showToast('Pushed to Gist', 'success');
     } catch (e) {
         console.error(e);
@@ -850,11 +950,17 @@ function showHelp() {
                 </h3>
                 <div class="space-y-4 text-sm text-white/80">
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>edit</code> &nbsp; Enter UI Edit Mode (Drag & Resize)</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>sync</code> &nbsp; Force sync config from URL</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>config [url]</code> &nbsp; Set remote config URL</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>reset</code> &nbsp; Reset to default</p>
+                    
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>reset</code> &nbsp; Reset navigation data (keep Gist settings)</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>help</code> &nbsp; Show this message</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>weight [thin|light|regular|bold|fill|duotone]</code> &nbsp; Icon weight</p>
+                    <div class="pt-4 border-t border-white/10"></div>
+                    <p class="opacity-80">Gist Sync (simple):</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist set &lt;id&gt; &lt;filename&gt;</code> &nbsp; Set target gist id and filename</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist token &lt;PAT&gt;</code> &nbsp; Set GitHub token (gist scope)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist pull</code> &nbsp; Pull from Gist (overwrite local)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist push</code> &nbsp; Push current config to Gist (overwrite remote)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist status</code> &nbsp; Show target/token/last pull/push</p>
                     <div class="pt-4 border-t border-white/10 text-xs opacity-60">
                         Tips: Click the clock to open this menu.<br>
                         In Edit Mode, use the eye icon to hide/show items.
@@ -882,6 +988,178 @@ function showHelp() {
             if (closeBtn) closeBtn.addEventListener('click', () => el.remove());
         }
     });
+}
+
+// ==========================================
+// Confirm Modal (Promise-based)
+// ==========================================
+function showConfirm(title, message, confirmLabel = 'Confirm', danger = false) {
+    return new Promise((resolve) => {
+        // Remove any existing confirm modal
+        const old = document.getElementById('confirm-modal');
+        if (old) old.remove();
+
+        const html = `
+        <div id="confirm-modal" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+          <div class="modal-glass rounded-2xl p-6 w-full max-w-md transform scale-95 transition-transform duration-300 shadow-2xl text-white">
+            <h3 class="text-xl font-bold mb-3 flex items-center gap-2"><i class="ph ${danger ? 'ph-warning text-red-400' : 'ph-question'}"></i> <span>${title}</span></h3>
+            <div class="text-sm text-white/80 whitespace-pre-line">${message}</div>
+            <div class="mt-6 flex justify-end gap-3">
+              <button id="confirm-cancel" class="px-4 py-2 text-sm text-white/70 hover:text-white transition-colors">Cancel</button>
+              <button id="confirm-ok" class="px-5 py-2 text-sm rounded-lg font-medium ${danger ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white transition-colors">${confirmLabel}</button>
+            </div>
+          </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
+        const el = document.getElementById('confirm-modal');
+        const box = el.firstElementChild;
+        const cleanup = (val) => { el.classList.add('opacity-0'); box.classList.add('scale-95'); setTimeout(() => { el.remove(); resolve(val); }, 180); };
+        requestAnimationFrame(() => { el.classList.remove('opacity-0'); box.classList.remove('scale-95'); box.classList.add('scale-100'); });
+        el.addEventListener('click', (e) => { if (e.target === el) cleanup(false); });
+        document.getElementById('confirm-cancel').addEventListener('click', () => cleanup(false));
+        document.getElementById('confirm-ok').addEventListener('click', () => cleanup(true));
+        const onKey = (e) => { if (e.key === 'Escape') cleanup(false); if (e.key === 'Enter') cleanup(true); };
+        document.addEventListener('keydown', onKey, { once: true });
+    });
+}
+
+// ==========================================
+// Gist Settings UI
+// ==========================================
+function bindGistSettingsUI() {
+    const open = document.getElementById('open-gist-settings');
+    const modal = document.getElementById('gist-modal');
+    if (!open || !modal) return;
+    const idInp = document.getElementById('gist-id-input');
+    const fileInp = document.getElementById('gist-file-input');
+    const tokenInp = document.getElementById('gist-token-input');
+    const statusEl = document.getElementById('gist-status');
+    const timesEl = document.getElementById('gist-times');
+    const saveBtn = document.getElementById('gist-save-btn');
+    const cancelBtn = document.getElementById('gist-cancel-btn');
+    const testBtn = document.getElementById('gist-test-btn');
+    const pullBtn = document.getElementById('gist-pull-btn');
+    const pushBtn = document.getElementById('gist-push-btn');
+    const copyIdBtn = document.getElementById('gist-copy-id');
+    const copyFileBtn = document.getElementById('gist-copy-file');
+    const toggleTokenBtn = document.getElementById('gist-toggle-token');
+    const clearTokenBtn = document.getElementById('gist-clear-token');
+    const importBtn = document.getElementById('gist-open-import-btn');
+    const copyConfigBtn = document.getElementById('gist-copy-config-btn');
+    const weightSel = document.getElementById('weight-select');
+    const resetAllBtn = document.getElementById('reset-all-btn');
+
+    const setStatus = (msg, ok = true) => { if (statusEl) { statusEl.textContent = msg; statusEl.style.color = ok ? '' : '#fca5a5'; } };
+    const setTimes = () => {
+        if (!timesEl) return;
+        const lp = localStorage.getItem(KEYS.gist.lastPull);
+        const lps = localStorage.getItem(KEYS.gist.lastPush);
+        timesEl.textContent = `Last Pull: ${lp? new Date(parseInt(lp)).toLocaleString(): '-'} | Last Push: ${lps? new Date(parseInt(lps)).toLocaleString(): '-'}`;
+    };
+
+    const openModal = () => {
+        const { id, file, token } = getGistConfig();
+        idInp.value = id || '';
+        fileInp.value = file || '';
+        tokenInp.value = token || '';
+        if (weightSel) weightSel.value = (localStorage.getItem(KEYS.iconWeight) || 'regular');
+        setTimes();
+        setStatus('');
+        modal.classList.remove('hidden');
+        requestAnimationFrame(() => { modal.classList.remove('opacity-0'); modal.firstElementChild.classList.remove('scale-95'); modal.firstElementChild.classList.add('scale-100'); });
+    };
+    const closeModal = () => {
+        modal.classList.add('opacity-0');
+        modal.firstElementChild.classList.add('scale-95');
+        modal.firstElementChild.classList.remove('scale-100');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+    };
+
+    open.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
+    cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    saveBtn.addEventListener('click', () => {
+        const id = idInp.value.trim();
+        const file = fileInp.value.trim();
+        const token = tokenInp.value.trim();
+        if (!id || !file) { setStatus('Please input gist id and filename', false); return; }
+        localStorage.setItem(KEYS.gist.id, id);
+        localStorage.setItem(KEYS.gist.file, file);
+        if (token) localStorage.setItem(KEYS.gist.token, token);
+        showToast('Gist settings saved', 'success');
+        closeModal();
+    });
+
+    testBtn.addEventListener('click', async () => {
+        const { id, file, token } = getGistConfig();
+        if (!id || !file) return setStatus('Configure Gist ID and Filename first', false);
+        try {
+            const res = await fetch(`https://api.github.com/gists/${encodeURIComponent(id)}`, { headers: { 'Accept':'application/vnd.github+json', ...(token? { 'Authorization': `token ${token}` }: {}) } });
+            if (!res.ok) { let msg=''; try{ const j=await res.json(); msg=j&&j.message? j.message: ''; }catch{}; return setStatus(`Connection failed: ${res.status} ${msg}`, false); }
+            const data = await res.json();
+            const f = data.files && data.files[file];
+            if (!f) return setStatus('Gist reachable, but file not found', false);
+            setStatus('OK');
+        } catch(e) { setStatus('Connection error: '+(e.message||e), false); }
+    });
+
+    pullBtn.addEventListener('click', async () => {
+        await gistPull();
+        setTimes();
+    });
+    pushBtn.addEventListener('click', async () => {
+        await gistPush();
+        setTimes();
+    });
+
+    copyIdBtn.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(idInp.value); setStatus('Copied Gist ID'); } catch { setStatus('Copy failed', false); }
+    });
+    copyFileBtn.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(fileInp.value); setStatus('Copied Filename'); } catch { setStatus('Copy failed', false); }
+    });
+    if (importBtn) importBtn.addEventListener('click', () => { shouldReturnToSettings = true; importClosingByApply = false; closeModal(); openImportModal(); });
+    if (copyConfigBtn) copyConfigBtn.addEventListener('click', async () => { try { exportYaml(); setStatus('Config copied'); } catch { setStatus('Copy failed', false); } });
+    toggleTokenBtn.addEventListener('click', (e) => {
+        const showing = tokenInp.type === 'text';
+        tokenInp.type = showing ? 'password' : 'text';
+        e.target.textContent = showing ? 'Show' : 'Hide';
+    });
+    clearTokenBtn.addEventListener('click', () => { localStorage.removeItem(KEYS.gist.token); tokenInp.value=''; setStatus('Token cleared'); });
+    if (weightSel) weightSel.addEventListener('change', () => { setIconWeight(weightSel.value); setStatus('Icon weight: '+weightSel.value); });
+    if (resetAllBtn) resetAllBtn.addEventListener('click', async () => {
+        const ok = await showConfirm('Reset Navigation Data', 'This will clear your local navigation layout and items (but keep Gist settings, token, wallpaper, and preferences). Continue?', 'Reset', true);
+        if (ok) {
+            try { localStorage.removeItem(KEYS.cache); } catch {}
+            showToast('Navigation data cleared. Reloading...', 'info');
+            setTimeout(() => location.reload(), 300);
+        }
+    });
+}
+
+// Open Settings modal programmatically (used after canceling Import)
+function openSettingsModal() {
+    const modal = document.getElementById('gist-modal');
+    if (!modal) return;
+    const idInp = document.getElementById('gist-id-input');
+    const fileInp = document.getElementById('gist-file-input');
+    const tokenInp = document.getElementById('gist-token-input');
+    const weightSel = document.getElementById('weight-select');
+    const statusEl = document.getElementById('gist-status');
+    const timesEl = document.getElementById('gist-times');
+    const { id, file, token } = getGistConfig();
+    if (idInp) idInp.value = id || '';
+    if (fileInp) fileInp.value = file || '';
+    if (tokenInp) tokenInp.value = token || '';
+    if (weightSel) weightSel.value = (localStorage.getItem(KEYS.iconWeight) || 'regular');
+    if (statusEl) statusEl.textContent = '';
+    if (timesEl) {
+        const lp = localStorage.getItem(KEYS.gist.lastPull);
+        const lps = localStorage.getItem(KEYS.gist.lastPush);
+        timesEl.textContent = `Last Pull: ${lp? new Date(parseInt(lp)).toLocaleString(): '-'} | Last Push: ${lps? new Date(parseInt(lps)).toLocaleString(): '-'}`;
+    }
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => { modal.classList.remove('opacity-0'); modal.firstElementChild.classList.remove('scale-95'); modal.firstElementChild.classList.add('scale-100'); });
 }
 
 // ==========================================
@@ -915,7 +1193,7 @@ function applyIconWeight(weight) {
 function setIconWeight(weight) {
     const valid = Object.keys(ICON_WEIGHT_TO_FAMILY);
     if (!valid.includes(weight)) { showToast('Invalid weight', 'error'); return; }
-    localStorage.setItem(ICON_WEIGHT_KEY, weight);
+    localStorage.setItem(KEYS.iconWeight, weight);
     applyIconWeight(weight);
     showToast('Icon weight: ' + weight, 'success');
 }
@@ -952,31 +1230,9 @@ document.addEventListener('click', (ev) => {
     }
 }, true);
 
-async function forceSync() {
-    const searchIcon = document.getElementById('search-icon');
-    searchIcon.classList.add('animate-spin');
-    const loadingToast = showToast("Syncing...", "loading", { duration: 0 });
-    try {
-        const targetUrl = localStorage.getItem(CUSTOM_CONFIG_KEY) || DEFAULT_CONFIG_URL;
-        if (targetUrl.includes('gist-user/example')) {
-            setTimeout(() => { processConfigData(fallbackData, true); saveToLocal(globalData); searchIcon.classList.remove('animate-spin'); }, 500);
-            return;
-        }
-        const res = await fetch(`${targetUrl}?t=${Date.now()}`);
-        if (!res.ok) throw new Error("Fetch failed");
-        const txt = await res.text();
-        const data = jsyaml.load(txt);
-        processConfigData(data, true);
-        saveToLocal(globalData);
-        showToast("Sync completed", "success");
-    } catch (e) { showToast(e.message, "error"); }
-    finally {
-        if (loadingToast && typeof loadingToast.dismiss === 'function') loadingToast.dismiss();
-        searchIcon.classList.remove('animate-spin');
-    }
-}
+// Legacy URL sync removed
 
-function saveToLocal(data) { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }
+function saveToLocal(data) { localStorage.setItem(KEYS.cache, JSON.stringify(data)); }
 
 // (Sync removed) — local save only
 
@@ -984,7 +1240,7 @@ function safeSig(obj) {
     try { return JSON.stringify(obj).length + ':' + Object.keys(obj||{}).length; } catch { return ''; }
 }
 function applyStoredWallpaper() {
-    const stored = localStorage.getItem(WALLPAPER_KEY);
+    const stored = localStorage.getItem(KEYS.wallpaper);
     if (!stored) return; // Never fetch on refresh; only apply if we have one
     let url = stored;
     if (stored.startsWith('{')) {
@@ -1006,7 +1262,7 @@ async function setBingBackground(manual = false) {
         // Preload to avoid black flicker; only swap when fully loaded
         await preloadImage(nextUrl);
         document.body.style.backgroundImage = `url('${nextUrl}')`;
-        try { localStorage.setItem(WALLPAPER_KEY, nextUrl); } catch {}
+        try { localStorage.setItem(KEYS.wallpaper, nextUrl); } catch {}
     } catch (e) {
         // suppress wallpaper change prompts
     } finally {
@@ -1028,7 +1284,7 @@ function toggleWallpaperButtonLoading(isLoading) {
 }
 // Helpers for wallpaper loading (Biturl JSON API)
 function getStoredWallpaperUrl() {
-    const stored = localStorage.getItem(WALLPAPER_KEY);
+    const stored = localStorage.getItem(KEYS.wallpaper);
     if (!stored) return '';
     if (stored.startsWith('{')) {
         try { const o = JSON.parse(stored); return o?.url || ''; } catch { return ''; }
@@ -1063,7 +1319,16 @@ async function fetchBiturlRandomUrl(prevUrl = '') {
     }
     try { return await fetchBiturlUrlByIndex(0); } catch { return ''; }
 }
-function updateStatus(text) { document.getElementById('data-source').textContent = text; }
+function updateStatus(text, withTime = false) {
+    const el = document.getElementById('data-source');
+    if (!el) return;
+    if (withTime) {
+        const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        el.textContent = `${text} (${t})`;
+    } else {
+        el.textContent = text;
+    }
+}
 function updateTime() {
     const now = new Date();
     document.getElementById('clock').textContent = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -1127,60 +1392,58 @@ function switchEngine(index) {
 }
 
 document.getElementById('search-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        const val = e.target.value.trim();
-        if (!val) return;
-        if (val === '>edit') { toggleEditMode(true); e.target.value = ''; return; }
-        if (val.startsWith('>config ')) { localStorage.setItem(CUSTOM_CONFIG_KEY, val.substring(8)); forceSync(); e.target.value = ''; return; }
-        if (val === '>sync') { forceSync(); e.target.value = ''; return; }
-        if (val === '>reset') { if (confirm("Reset?")) { localStorage.clear(); location.reload(); } e.target.value = ''; return; }
-        if (val === '>help') { showHelp(); e.target.value = ''; return; }
-        // --- Simple Gist commands ---
-        if (val.startsWith('>gist token ')) {
+    if (e.key !== 'Enter') return;
+    const val = e.target.value.trim();
+    if (!val) return;
+
+    const run = (fn) => { try { fn(); } finally { e.target.value = ''; } };
+    const cmds = [
+        { test: v => v === '>edit', run: () => toggleEditMode(true) },
+        { test: v => v === '>reset', run: () => {
+            (async () => {
+                const ok = await showConfirm('Reset Navigation Data', 'This will clear your local navigation layout and items only (keeps Gist settings, token, wallpaper and preferences). Continue?', 'Reset', true);
+                if (ok) { try { localStorage.removeItem(KEYS.cache); } catch {} location.reload(); }
+            })();
+        } },
+        { test: v => v === '>help', run: () => showHelp() },
+        { test: v => v.startsWith('>gist token '), run: () => {
             const token = val.substring('>gist token '.length).trim();
-            if (!token) { showToast('Usage: >gist token <token>', 'error'); e.target.value=''; return; }
-            localStorage.setItem(GIST_TOKEN_KEY, token);
+            if (!token) return showToast('Usage: >gist token <token>', 'error');
+            localStorage.setItem(KEYS.gist.token, token);
             showToast('Gist token set', 'success');
-            e.target.value = '';
-            return;
-        }
-        if (val.startsWith('>gist set ')) {
+        } },
+        { test: v => v.startsWith('>gist set '), run: () => {
             const rest = val.substring('>gist set '.length).trim();
             const parts = rest.split(/\s+/);
-            if (parts.length < 2) { showToast('Usage: >gist set <id> <filename>', 'error'); e.target.value=''; return; }
-            localStorage.setItem(GIST_ID_KEY, parts[0]);
-            localStorage.setItem(GIST_FILE_KEY, parts.slice(1).join(' '));
+            if (parts.length < 2) return showToast('Usage: >gist set <id> <filename>', 'error');
+            localStorage.setItem(KEYS.gist.id, parts[0]);
+            localStorage.setItem(KEYS.gist.file, parts.slice(1).join(' '));
             showToast('Gist target set', 'success');
-            e.target.value = '';
-            return;
-        }
-        if (val === '>gist pull') { gistPull(); e.target.value = ''; return; }
-        if (val === '>gist push') { gistPush(); e.target.value = ''; return; }
-        if (val === '>gist status') {
+        } },
+        { test: v => v === '>gist pull', run: () => gistPull() },
+        { test: v => v === '>gist push', run: () => gistPush() },
+        { test: v => v === '>gist status', run: () => {
             const { id, file, token } = getGistConfig();
-            const lastPull = localStorage.getItem(GIST_LAST_PULL);
-            const lastPush = localStorage.getItem(GIST_LAST_PUSH);
+            const lastPull = localStorage.getItem(KEYS.gist.lastPull);
+            const lastPush = localStorage.getItem(KEYS.gist.lastPush);
             showToast(`Gist: ${id||'-'}/${file||'-'} | token: ${token? 'set': 'none'} | pull: ${lastPull? new Date(parseInt(lastPull)).toLocaleString(): '-' } | push: ${lastPush? new Date(parseInt(lastPush)).toLocaleString(): '-'}`, 'info', { duration: 5000 });
-            e.target.value = '';
-            return;
-        }
-        // (Sync removed) overlay commands disabled
-        if (val === '>weight') {
-            const current = localStorage.getItem(ICON_WEIGHT_KEY) || 'regular';
+        } },
+        { test: v => v === '>weight', run: () => {
+            const current = localStorage.getItem(KEYS.iconWeight) || 'regular';
             showToast('Current weight: ' + current + ' (thin|light|regular|bold|fill|duotone)', 'info');
-            e.target.value = '';
-            return;
-        }
-        if (val.startsWith('>weight ')) {
+        } },
+        { test: v => v.startsWith('>weight '), run: () => {
             const w = val.split(/\s+/)[1];
             setIconWeight(w);
-            e.target.value = '';
-            return;
-        }
+        } },
+    ];
 
-        window.open(searchEngines[currentEngineIndex].url + encodeURIComponent(val), '_blank');
-        e.target.value = '';
+    for (const c of cmds) {
+        if (c.test(val)) { return run(c.run); }
     }
+
+    window.open(searchEngines[currentEngineIndex].url + encodeURIComponent(val), '_blank');
+    e.target.value = '';
 });
 const fallbackData = { search: defaultEngines, categories: [{ category: "Sample", color: "from-blue-600/20 to-indigo-600/20", items: [{ name: "Google", url: "https://google.com", icon: "ph-google-logo" }] }] };
 

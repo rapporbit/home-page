@@ -34,14 +34,7 @@
             EDIT MODE
         </div>
         <div class="flex gap-3">
-            <button id="btn-open-import"
-                class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                <i class="ph ph-download-simple"></i> Import Config
-            </button>
-            <button id="btn-export-yaml"
-                class="px-4 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                <i class="ph ph-export"></i> Copy Config
-            </button>
+
             <button id="btn-done-edit"
                 class="px-4 py-1.5 bg-white text-emerald-700 hover:bg-gray-100 rounded-lg text-sm font-bold transition-colors">
                 Done
@@ -198,11 +191,90 @@
 
     <footer class="relative z-10 mt-0 mb-12 md:mb-16 text-center text-white/40 text-sm font-medium">
         <span id="bing-copyright">Image by Bing</span> | <span id="data-source">Local Data</span> | <a
-            href="https://github.com/rapporbit/simple-start-page">Github</a>
+            href="https://github.com/rapporbit/simple-start-page">Github</a> | <a href="javascript:void(0)" id="open-gist-settings">Settings</a> | <a href="javascript:void(0)" id="footer-edit-toggle">Edit</a>
     </footer>
+
+    <!-- Gist Settings Modal (inline, consistent style) -->
+    <div id="gist-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        <div class="modal-glass rounded-2xl p-6 w-full max-w-lg transform scale-95 transition-transform duration-300 shadow-2xl">
+            <h3 class="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
+                <i class="ph ph-gear"></i> <span>Settings</span>
+            </h3>
+            <div class="space-y-5">
+                <!-- Gist section (single-column fields) -->
+                <div class="space-y-4">
+                    <div class="text-sm md:text-base font-semibold uppercase tracking-wider text-white/80">Gist Sync</div>
+                    <div>
+                        <label class="block text-xs text-white/50 uppercase mb-1">Gist ID</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="gist-id-input" class="input-glass" placeholder="a1b2c3d4...">
+                            <button id="gist-copy-id" class="px-2 md:px-3 py-1.5 text-xs md:text-sm rounded-lg bg-white/10 hover:bg-white/20">Copy</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-white/50 uppercase mb-1">Filename</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="gist-file-input" class="input-glass" placeholder="nav.yaml">
+                            <button id="gist-copy-file" class="px-2 md:px-3 py-1.5 text-xs md:text-sm rounded-lg bg-white/10 hover:bg-white/20">Copy</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-white/50 uppercase mb-1">Token (gist scope)</label>
+                        <div class="flex gap-2">
+                            <input type="password" id="gist-token-input" class="input-glass" placeholder="ghp_...">
+                            <button id="gist-toggle-token" class="px-2 md:px-3 py-1.5 text-xs md:text-sm rounded-lg bg-white/10 hover:bg-white/20">Show</button>
+                            <button id="gist-clear-token" class="px-2 md:px-3 py-1.5 text-xs md:text-sm rounded-lg bg-red-600 hover:bg-red-500">Clear</button>
+                        </div>
+                        <p class="text-xs md:text-sm text-white/50 mt-1">Token is stored locally only. Required for private gists and push.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 md:gap-3 justify-end pt-1">
+                        <button id="gist-test-btn" class="w-24 shrink-0 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg">Test</button>
+                        <button id="gist-pull-btn" class="w-24 shrink-0 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg">Pull</button>
+                        <button id="gist-push-btn" class="w-24 shrink-0 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg">Push</button>
+                    </div>
+                    <div class="pt-1">
+                        <div id="gist-status" class="text-sm md:text-base text-white/70"></div>
+                        <div id="gist-times" class="text-xs md:text-sm text-white/50"></div>
+                    </div>
+                </div>
+
+                <!-- Page & Config (single-column fields) -->
+                <div class="space-y-4 pt-2 border-t border-white/10">
+                    <div class="text-sm md:text-base font-semibold uppercase tracking-wider text-white/80">Page & Config</div>
+                    <div>
+                        <label class="block text-xs text-white/50 uppercase mb-1">Icon Weight</label>
+                        <select id="weight-select" class="input-glass bg-black max-w-[12rem]">
+                            <option value="regular">regular</option>
+                            <option value="thin">thin</option>
+                            <option value="light">light</option>
+                            <option value="bold">bold</option>
+                            <option value="fill">fill</option>
+                            <option value="duotone">duotone</option>
+                        </select>
+                    </div>
+                        <div class="flex flex-wrap items-center gap-2 md:gap-3 justify-between">
+                        <div class="flex gap-2 md:gap-3">
+                            <button id="reset-all-btn" class="w-16 shrink-0 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg">Reset</button>
+                        </div>
+                        <div class="flex flex-wrap gap-2 md:gap-3 justify-end">
+                            <button id="gist-open-import-btn" class="w-32 shrink-0 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center gap-1"><i class="ph ph-download-simple"></i> Import Config</button>
+                            <button id="gist-copy-config-btn" class="w-32 shrink-0 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center gap-1"><i class="ph ph-export"></i> Copy Config</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer actions -->
+                <div class="mt-2 flex flex-wrap gap-2 md:gap-3 justify-end">
+                    <button id="gist-save-btn" class="px-4 md:px-5 py-2 text-sm md:text-base bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg">Save</button>
+                    <button id="gist-cancel-btn" class="px-3 py-1.5 text-sm text-white/70 hover:text-white">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 引入核心逻辑 -->
     <script src="js/app.js"></script>
 </body>
 
 </html>
+

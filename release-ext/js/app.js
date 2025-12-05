@@ -1,14 +1,12 @@
 // ==========================================
 // Constants & State
 // ==========================================
-const DEFAULT_CONFIG_URL = "https://gist.githubusercontent.com/gist-user/example/raw/nav-config-v2.yml";
 // Bing Biturl API (JSON -> static Bing image URL)
 const BITURL_API = "https://bing.biturl.top/";
 const BITURL_DEFAULT_RES = "UHD"; // 1366, 1920, 3840, UHD
 const BITURL_DEFAULT_MKT = "zh-CN";
 const CACHE_KEY = "nav_config_cache";
-const LAST_SYNC_KEY = "nav_last_sync";
-const CUSTOM_CONFIG_KEY = "nav_custom_config_url";
+// Removed legacy URL sync constants
 const WALLPAPER_KEY = "nav_wallpaper_url";
 // --- Simple Gist Sync (minimal) ---
 const GIST_ID_KEY = 'gist_id';
@@ -78,17 +76,18 @@ async function init() {
     if (wallpaperButton) wallpaperButton.addEventListener('click', () => setBingBackground(true));
 
     const cachedData = localStorage.getItem(CACHE_KEY);
-    const hasCustomConfig = localStorage.getItem(CUSTOM_CONFIG_KEY);
-
     if (cachedData) {
         try {
             const parsed = JSON.parse(cachedData);
             processConfigData(parsed, false);
-            updateStatus(hasCustomConfig ? "Local Cache (Custom)" : "Local Cache (Default)");
-        } catch (e) { forceSync(); }
+            updateStatus("Local Data");
+        } catch (e) {
+            processConfigData(fallbackData, true);
+            updateStatus("Default Data");
+        }
     } else {
-        if (hasCustomConfig) forceSync();
-        else setTimeout(() => { processConfigData(fallbackData, true); updateStatus("Default Data"); }, 500);
+        processConfigData(fallbackData, true);
+        updateStatus("Default Data");
     }
     // Sync removed; initialization completes here
 }
@@ -98,6 +97,7 @@ async function init() {
 // ==========================================
 let tooltipEl = null;
 let tooltipTarget = null;
+let tooltipRaf = 0, tooltipNextX = 0, tooltipNextY = 0;
 
 function ensureTooltip() {
     if (!tooltipEl) {
@@ -166,7 +166,13 @@ function initTooltipDelegation() {
 
     document.addEventListener('mousemove', (e) => {
         if (!tooltipEl || !tooltipEl.classList.contains('show')) return;
-        if (tooltipTarget) positionTooltipAt(e.clientX, e.clientY);
+        tooltipNextX = e.clientX; tooltipNextY = e.clientY;
+        if (!tooltipRaf) {
+            tooltipRaf = requestAnimationFrame(() => {
+                positionTooltipAt(tooltipNextX, tooltipNextY);
+                tooltipRaf = 0;
+            });
+        }
     }, true);
 
     document.addEventListener('mouseout', (e) => {
@@ -378,49 +384,71 @@ function updateFolderScrollAreaHeight() {
 function createItemElement(item, index, parentIndex) {
     const wrapper = document.createElement('div');
     wrapper.setAttribute('data-id', index);
-    wrapper.className = "relative group";
+    wrapper.className = 'relative group';
     if (isEditMode && item.hidden) wrapper.classList.add('is-hidden-element');
 
-        if (isEditMode) {
-            const controls = document.createElement('div');
-            controls.className = "absolute -top-2 -right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity scale-90";
-            const hiddenBadge = item.hidden ? `<span class="p-1.5 bg-gray-600 rounded-full text-white shadow-lg"><i class="ph ph-eye-slash text-xs"></i></span>` : '';
-            controls.innerHTML = `
+    // Edit controls (no external data in HTML)
+    if (isEditMode) {
+        const controls = document.createElement('div');
+        controls.className = 'absolute -top-2 -right-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity scale-90';
+        const hiddenBadge = item.hidden ? '<span class="p-1.5 bg-gray-600 rounded-full text-white shadow-lg"><i class="ph ph-eye-slash text-xs"></i></span>' : '';
+        controls.innerHTML = `
             ${hiddenBadge}
             <button class="p-1.5 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-500" data-action="edit-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-pencil-simple text-xs"></i></button>
             <button class="p-1.5 bg-red-600 rounded-full text-white shadow-lg hover:bg-red-500" data-action="delete-item" data-parent="${parentIndex}" data-index="${index}"><i class="ph ph-trash text-xs"></i></button>
         `;
-            controls.addEventListener('click', (ev) => {
-                const btn = ev.target.closest('button[data-action]');
-                if (!btn) return;
-                const p = parseInt(btn.getAttribute('data-parent'));
-                const i = parseInt(btn.getAttribute('data-index'));
-                const act = btn.getAttribute('data-action');
-                if (act === 'edit-item') openModal('item', null, p, i);
-                else if (act === 'delete-item') deleteItem(p, i);
-            });
-            wrapper.appendChild(controls);
-        }
+        controls.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button[data-action]');
+            if (!btn) return;
+            const p = parseInt(btn.getAttribute('data-parent'));
+            const i = parseInt(btn.getAttribute('data-index'));
+            const act = btn.getAttribute('data-action');
+            if (act === 'edit-item') openModal('item', null, p, i);
+            else if (act === 'delete-item') deleteItem(p, i);
+        });
+        wrapper.appendChild(controls);
+    }
+
+    const sanitizeIcon = (ic) => (/^ph-[a-z0-9-]+$/i.test(ic || '') ? ic : 'ph-link');
 
     if (item.url_private) {
-        const containerClass = isEditMode ? "nav-item opacity-80 cursor-grab" : "nav-item";
-        // Keep same overall height as normal items by using p-2 on container and a compact toggle button
-        wrapper.innerHTML += `
-            <div class="${containerClass} w-full block flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white bg-white/5 hover:bg-white/20 overflow-hidden">
-                <button class="toggle-btn shrink-0 rounded inline-flex items-center justify-center p-0 leading-none hover:bg-white/10 transition-colors" title="Switch: Public / Private">
-                    <i class="ph ${item.icon || 'ph-link'} text-lg opacity-70 main-icon transition-colors"></i>
-                </button>
-                <a href="${isEditMode ? 'javascript:void(0)' : item.url}" ${!isEditMode ? 'target="_blank"' : ''} data-tooltip="${item.name}" class="flex-1 min-w-0 flex items-center">
-                    <span class="truncate w-full block main-text transition-colors">${item.name}</span>
-                </a>
-            </div>`;
+        const container = document.createElement('div');
+        container.className = (isEditMode ? 'nav-item opacity-80 cursor-grab' : 'nav-item') + ' w-full block flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white bg-white/5 hover:bg-white/20 overflow-hidden';
+
+        const toggle = document.createElement('button');
+        toggle.className = 'toggle-btn shrink-0 rounded inline-flex items-center justify-center p-0 leading-none hover:bg-white/10 transition-colors';
+        toggle.title = 'Switch: Public / Private';
+        const icon = document.createElement('i');
+        icon.className = `ph ${sanitizeIcon(item.icon)} text-lg opacity-70 main-icon transition-colors`;
+        toggle.appendChild(icon);
+
+        const link = document.createElement('a');
+        link.className = 'flex-1 min-w-0 flex items-center';
+        if (!isEditMode) { link.target = '_blank'; link.href = item.url; }
+        else { link.href = 'javascript:void(0)'; }
+        link.setAttribute('data-tooltip', item.name || '');
+        const span = document.createElement('span');
+        span.className = 'truncate w-full block main-text transition-colors';
+        span.textContent = item.name || '';
+        link.appendChild(span);
+
+        container.appendChild(toggle);
+        container.appendChild(link);
+        wrapper.appendChild(container);
         if (!isEditMode) bindPrivateToggle(wrapper, item);
     } else {
-        wrapper.innerHTML += `
-            <a href="${isEditMode ? 'javascript:void(0)' : item.url}" ${!isEditMode ? 'target="_blank"' : ''} data-tooltip="${item.name}" class="nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20 ${isEditMode ? 'cursor-grab opacity-80' : ''}">
-                <i class="ph ${item.icon || 'ph-link'} text-lg opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all"></i>
-                <span class="truncate">${item.name}</span>
-            </a>`;
+        const link = document.createElement('a');
+        link.className = 'nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20' + (isEditMode ? ' cursor-grab opacity-80' : '');
+        if (!isEditMode) { link.target = '_blank'; link.href = item.url; } else { link.href = 'javascript:void(0)'; }
+        link.setAttribute('data-tooltip', item.name || '');
+        const icon = document.createElement('i');
+        icon.className = `ph ${sanitizeIcon(item.icon)} text-lg opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all`;
+        const span = document.createElement('span');
+        span.className = 'truncate';
+        span.textContent = item.name || '';
+        link.appendChild(icon);
+        link.appendChild(span);
+        wrapper.appendChild(link);
     }
     return wrapper;
 }
@@ -435,9 +463,11 @@ function bindPrivateToggle(wrapper, item) {
     btn.onclick = (e) => {
         e.preventDefault(); e.stopPropagation();
         isPrivate = !isPrivate;
-
-        icon.style.transform = "rotate(360deg)";
-        setTimeout(() => icon.style.transform = "rotate(0deg)", 300);
+        // Animate icon spin
+        icon.classList.remove('spin-once');
+        // force reflow to restart animation
+        void icon.offsetWidth;
+        icon.classList.add('spin-once');
 
         if (isPrivate) {
             link.href = item.url_private;
@@ -753,12 +783,12 @@ function buildExportYaml() {
                 rowSpan: c.rowSpan || 1
             };
             if (c.hidden) catObj.hidden = true;
-            catObj.items = (c.items || []).map(item => {
-                const cleanItem = { name: item.name, url: item.url, icon: item.icon };
-                if (item.url_private) cleanItem.url_private = item.url_private;
-                if (item.hidden) cleanItem.hidden = true;
-                return cleanItem;
-            });
+    catObj.items = (c.items || []).map((item, j) => {
+        const cleanItem = { name: item.name, url: item.url, icon: item.icon, order: j + 1 };
+        if (item.url_private) cleanItem.url_private = item.url_private;
+        if (item.hidden) cleanItem.hidden = true;
+        return cleanItem;
+    });
             return catObj;
         })
     };
@@ -783,14 +813,18 @@ async function gistPull() {
                 ...(token ? { 'Authorization': `token ${token}` } : {})
             }
         });
-        if (!res.ok) throw new Error('Gist fetch failed');
+        if (!res.ok) {
+            let msg = 'Gist fetch failed';
+            try { const j = await res.json(); if (j && j.message) msg += `: ${j.message}`; } catch {}
+            throw new Error(`${msg} (HTTP ${res.status})`);
+        }
         const data = await res.json();
         const f = data.files && data.files[file];
         if (!f) throw new Error('File not found in gist');
         let text = '';
         if (f.truncated && f.raw_url) {
             const raw = await fetch(f.raw_url);
-            if (!raw.ok) throw new Error('Raw fetch failed');
+            if (!raw.ok) throw new Error(`Raw fetch failed (HTTP ${raw.status})`);
             text = await raw.text();
         } else {
             text = f.content || '';
@@ -823,7 +857,11 @@ async function gistPush(message = 'Update from extension') {
             },
             body: JSON.stringify(body)
         });
-        if (!res.ok) throw new Error('Gist push failed');
+        if (!res.ok) {
+            let msg = 'Gist push failed';
+            try { const j = await res.json(); if (j && j.message) msg += `: ${j.message}`; } catch {}
+            throw new Error(`${msg} (HTTP ${res.status})`);
+        }
         localStorage.setItem(GIST_LAST_PUSH, String(Date.now()));
         updateStatus('Gist Pushed');
         showToast('Pushed to Gist', 'success');
@@ -850,11 +888,17 @@ function showHelp() {
                 </h3>
                 <div class="space-y-4 text-sm text-white/80">
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>edit</code> &nbsp; Enter UI Edit Mode (Drag & Resize)</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>sync</code> &nbsp; Force sync config from URL</p>
-                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>config [url]</code> &nbsp; Set remote config URL</p>
+                    
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>reset</code> &nbsp; Reset to default</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>help</code> &nbsp; Show this message</p>
                     <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>weight [thin|light|regular|bold|fill|duotone]</code> &nbsp; Icon weight</p>
+                    <div class="pt-4 border-t border-white/10"></div>
+                    <p class="opacity-80">Gist Sync (simple):</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist set &lt;id&gt; &lt;filename&gt;</code> &nbsp; Set target gist id and filename</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist token &lt;PAT&gt;</code> &nbsp; Set GitHub token (gist scope)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist pull</code> &nbsp; Pull from Gist (overwrite local)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist push</code> &nbsp; Push current config to Gist (overwrite remote)</p>
+                    <p><code class="bg-white/20 px-2 py-1 rounded font-mono">>gist status</code> &nbsp; Show target/token/last pull/push</p>
                     <div class="pt-4 border-t border-white/10 text-xs opacity-60">
                         Tips: Click the clock to open this menu.<br>
                         In Edit Mode, use the eye icon to hide/show items.
@@ -952,29 +996,7 @@ document.addEventListener('click', (ev) => {
     }
 }, true);
 
-async function forceSync() {
-    const searchIcon = document.getElementById('search-icon');
-    searchIcon.classList.add('animate-spin');
-    const loadingToast = showToast("Syncing...", "loading", { duration: 0 });
-    try {
-        const targetUrl = localStorage.getItem(CUSTOM_CONFIG_KEY) || DEFAULT_CONFIG_URL;
-        if (targetUrl.includes('gist-user/example')) {
-            setTimeout(() => { processConfigData(fallbackData, true); saveToLocal(globalData); searchIcon.classList.remove('animate-spin'); }, 500);
-            return;
-        }
-        const res = await fetch(`${targetUrl}?t=${Date.now()}`);
-        if (!res.ok) throw new Error("Fetch failed");
-        const txt = await res.text();
-        const data = jsyaml.load(txt);
-        processConfigData(data, true);
-        saveToLocal(globalData);
-        showToast("Sync completed", "success");
-    } catch (e) { showToast(e.message, "error"); }
-    finally {
-        if (loadingToast && typeof loadingToast.dismiss === 'function') loadingToast.dismiss();
-        searchIcon.classList.remove('animate-spin');
-    }
-}
+// Legacy URL sync removed
 
 function saveToLocal(data) { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); }
 
@@ -1063,7 +1085,12 @@ async function fetchBiturlRandomUrl(prevUrl = '') {
     }
     try { return await fetchBiturlUrlByIndex(0); } catch { return ''; }
 }
-function updateStatus(text) { document.getElementById('data-source').textContent = text; }
+function updateStatus(text) {
+    const el = document.getElementById('data-source');
+    if (!el) return;
+    const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.textContent = `${text} (${t})`;
+}
 function updateTime() {
     const now = new Date();
     document.getElementById('clock').textContent = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -1127,60 +1154,53 @@ function switchEngine(index) {
 }
 
 document.getElementById('search-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        const val = e.target.value.trim();
-        if (!val) return;
-        if (val === '>edit') { toggleEditMode(true); e.target.value = ''; return; }
-        if (val.startsWith('>config ')) { localStorage.setItem(CUSTOM_CONFIG_KEY, val.substring(8)); forceSync(); e.target.value = ''; return; }
-        if (val === '>sync') { forceSync(); e.target.value = ''; return; }
-        if (val === '>reset') { if (confirm("Reset?")) { localStorage.clear(); location.reload(); } e.target.value = ''; return; }
-        if (val === '>help') { showHelp(); e.target.value = ''; return; }
-        // --- Simple Gist commands ---
-        if (val.startsWith('>gist token ')) {
+    if (e.key !== 'Enter') return;
+    const val = e.target.value.trim();
+    if (!val) return;
+
+    const run = (fn) => { try { fn(); } finally { e.target.value = ''; } };
+    const cmds = [
+        { test: v => v === '>edit', run: () => toggleEditMode(true) },
+        { test: v => v === '>reset', run: () => { if (confirm('Reset?')) { localStorage.clear(); location.reload(); } } },
+        { test: v => v === '>help', run: () => showHelp() },
+        { test: v => v.startsWith('>gist token '), run: () => {
             const token = val.substring('>gist token '.length).trim();
-            if (!token) { showToast('Usage: >gist token <token>', 'error'); e.target.value=''; return; }
+            if (!token) return showToast('Usage: >gist token <token>', 'error');
             localStorage.setItem(GIST_TOKEN_KEY, token);
             showToast('Gist token set', 'success');
-            e.target.value = '';
-            return;
-        }
-        if (val.startsWith('>gist set ')) {
+        } },
+        { test: v => v.startsWith('>gist set '), run: () => {
             const rest = val.substring('>gist set '.length).trim();
             const parts = rest.split(/\s+/);
-            if (parts.length < 2) { showToast('Usage: >gist set <id> <filename>', 'error'); e.target.value=''; return; }
+            if (parts.length < 2) return showToast('Usage: >gist set <id> <filename>', 'error');
             localStorage.setItem(GIST_ID_KEY, parts[0]);
             localStorage.setItem(GIST_FILE_KEY, parts.slice(1).join(' '));
             showToast('Gist target set', 'success');
-            e.target.value = '';
-            return;
-        }
-        if (val === '>gist pull') { gistPull(); e.target.value = ''; return; }
-        if (val === '>gist push') { gistPush(); e.target.value = ''; return; }
-        if (val === '>gist status') {
+        } },
+        { test: v => v === '>gist pull', run: () => gistPull() },
+        { test: v => v === '>gist push', run: () => gistPush() },
+        { test: v => v === '>gist status', run: () => {
             const { id, file, token } = getGistConfig();
             const lastPull = localStorage.getItem(GIST_LAST_PULL);
             const lastPush = localStorage.getItem(GIST_LAST_PUSH);
             showToast(`Gist: ${id||'-'}/${file||'-'} | token: ${token? 'set': 'none'} | pull: ${lastPull? new Date(parseInt(lastPull)).toLocaleString(): '-' } | push: ${lastPush? new Date(parseInt(lastPush)).toLocaleString(): '-'}`, 'info', { duration: 5000 });
-            e.target.value = '';
-            return;
-        }
-        // (Sync removed) overlay commands disabled
-        if (val === '>weight') {
+        } },
+        { test: v => v === '>weight', run: () => {
             const current = localStorage.getItem(ICON_WEIGHT_KEY) || 'regular';
             showToast('Current weight: ' + current + ' (thin|light|regular|bold|fill|duotone)', 'info');
-            e.target.value = '';
-            return;
-        }
-        if (val.startsWith('>weight ')) {
+        } },
+        { test: v => v.startsWith('>weight '), run: () => {
             const w = val.split(/\s+/)[1];
             setIconWeight(w);
-            e.target.value = '';
-            return;
-        }
+        } },
+    ];
 
-        window.open(searchEngines[currentEngineIndex].url + encodeURIComponent(val), '_blank');
-        e.target.value = '';
+    for (const c of cmds) {
+        if (c.test(val)) { return run(c.run); }
     }
+
+    window.open(searchEngines[currentEngineIndex].url + encodeURIComponent(val), '_blank');
+    e.target.value = '';
 });
 const fallbackData = { search: defaultEngines, categories: [{ category: "Sample", color: "from-blue-600/20 to-indigo-600/20", items: [{ name: "Google", url: "https://google.com", icon: "ph-google-logo" }] }] };
 
