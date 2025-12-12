@@ -127,7 +127,6 @@ function createItemElement(group, item) {
     toggle.appendChild(icon);
     const link = document.createElement('a');
     link.className = 'flex-1 p-2 pl-0 min-w-0 block h-full flex items-center';
-    link.target = '_blank';
     link.href = item.url;
     link.setAttribute('data-tooltip', item.name || '');
     const span = document.createElement('span');
@@ -146,8 +145,6 @@ function createItemElement(group, item) {
       'nav-item flex items-center gap-3 p-2 rounded-xl text-white/90 text-sm font-medium hover:text-white w-full block bg-white/5 hover:bg-white/20' +
       (editMode ? ' cursor-pointer opacity-80' : '');
     if (!editMode) {
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
       link.href = item.url;
     } else {
       link.type = 'button';
