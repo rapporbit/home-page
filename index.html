@@ -6,6 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Start Page</title>
     <link rel="icon" href="favicon.png" type="image/png">
+    <!-- 预连接：减少首次拉取 Bing 壁纸/接口的握手耗时 -->
+    <link rel="preconnect" href="https://www.bing.com" crossorigin>
+    <link rel="dns-prefetch" href="https://www.bing.com">
+    <link rel="preconnect" href="https://bing.biturl.top" crossorigin>
+    <link rel="dns-prefetch" href="https://bing.biturl.top">
+
+    <!-- 尽可能早地应用并预加载已缓存的壁纸（提升首屏观感） -->
+    <script src="js/pre-init.js"></script>
     <!-- 本地样式与依赖（MV3 兼容） -->
     <link rel="stylesheet" href="dist/app.css?v=0.1.1">
     <link rel="stylesheet" href="css/style.css?v=0.1.1">
@@ -19,7 +27,6 @@
     <!-- 本地脚本库 -->
     <script src="vendor/js-yaml.min.js"></script>
     <script src="vendor/Sortable.min.js"></script>
-    <script src="js/pre-init.js"></script>
 </head>
 
 <body class="min-h-screen text-white selection:bg-pink-500 selection:text-white">

@@ -1,15 +1,39 @@
 body {
     background-color: #333;
-    background-image: var(--wallpaper-url);
+    /* 先渲染渐变占位，壁纸未加载完成时也不会“黑一秒” */
+    background-image: var(--wallpaper-url, none), radial-gradient(1200px circle at 20% 10%, rgba(255, 255, 255, 0.12), transparent 55%), radial-gradient(900px circle at 80% 30%, rgba(59, 130, 246, 0.16), transparent 55%), radial-gradient(1000px circle at 30% 90%, rgba(16, 185, 129, 0.14), transparent 60%);
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
     font-family: 'Inter', sans-serif;
     transition: background-image 0.5s ease-in-out;
+    /* 为淡入层建立 stacking context，确保 pseudo-element 在内容下方 */
+    position: relative;
+    z-index: 0;
     /* 确保在 firefox 中也有不错的滚动体验 */
     scrollbar-width: thin;
     /* 调亮 Firefox 滚动条颜色 */
     scrollbar-color: rgba(255, 255, 255, 0.4) transparent;
+}
+
+/* 高清壁纸淡入层：在主背景之上、内容之下 */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--wallpaper-fade-url, none);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    opacity: var(--wallpaper-fade-opacity, 0);
+    transition: opacity 180ms ease;
+    will-change: opacity;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body::before { transition: none; }
 }
 
 /* =========================================

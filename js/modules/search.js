@@ -33,7 +33,14 @@ function bindInput() {
     if (e.key !== 'Enter') return;
     const val = e.target.value.trim();
     if (!val) return;
-    window.open(engines[engineIndex].url + encodeURIComponent(val), '_blank');
+    const url = engines[engineIndex].url + encodeURIComponent(val);
+    // Ctrl/⌘+Enter opens in a new tab; otherwise navigate in current tab.
+    if (e.ctrlKey || e.metaKey) {
+      const w = window.open(url, '_blank', 'noopener,noreferrer');
+      if (w) w.opener = null;
+    } else {
+      window.location.assign(url);
+    }
     e.target.value = '';
   });
 }
